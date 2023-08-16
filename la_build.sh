@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CROSS_COMPILE=~/install-32-glibc-loongarch-novec-reduce-linux-5-14/bin/loongarch32-linux-gnu-
+export CROSS_COMPILE=loongarch32r-linux-gnusf-
 export ARCH=loongarch
 OUT=la_build
 

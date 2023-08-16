@@ -216,6 +216,8 @@ void __init time_init(void)
 	else
 		const_clock_freq = calc_const_freq();
 
+	pr_info("Core: %llu Hz\n", const_clock_freq);
+
 	constant_clockevent_init();
 	constant_clocksource_init();
 }

@@ -112,7 +112,18 @@ static void probe_pcache(void)
 	unsigned int lsize, sets, ways;
 	unsigned int config;
 
-	config = 0xfe994cd3;
+	/*
+	24-22:	icache sets
+	21-19:	icache line size
+	18-16:	icache ways - 1
+
+	15-13:	dcache sets
+	12-10:	dcache line size
+	 9- 7:	dcache ways - 1
+	*/
+	config = 0xfe994cd3;//8kB, 16B line, 2-way
+
+	config = 0xFE6130D3;//8kB, 32B line, 2-way
 
 	lsize = (config >> 19) & 7;
 	sets  = 1 << ((config & CPUCFG17_L1I_SETS_M) >> CPUCFG17_L1I_SETS);

@@ -92,9 +92,9 @@ static void decode_configs(struct cpuinfo_loongarch *c)
 
 	asid_mask =0xff;
 	set_cpu_asid_mask(c, asid_mask);
-	c->tlbsizemtlb = 0x40;
-	c->tlbsizestlbsets = 0x100;
-	c->tlbsizestlbways = 0x8;
+	c->tlbsizemtlb = 32;
+	c->tlbsizestlbsets = 0;
+	c->tlbsizestlbways = 0;
 	c->tlbsize = c->tlbsizemtlb + c->tlbsizestlbsets*  c->tlbsizestlbways;
 }
 
@@ -119,6 +119,7 @@ static inline void cpu_probe_loongson(struct cpuinfo_loongarch *c, unsigned int 
 		c->cputype = CPU_LOONGSON32;
 		set_isa(c, LOONGARCH_CPU_ISA_LA32S);
 		__cpu_family[cpu] = "Loongson-32bit";
+		pr_info("TLB: tlbsizemtlb: %d, tlbsizestlbsets: %d, tlbsizestlbways: %d\n", c->tlbsizemtlb, c->tlbsizestlbsets, c->tlbsizestlbways);
 		pr_info("Standard 32-bit Loongson Processor probed\n");
 		break;
 	default: // Default to 64 bit
