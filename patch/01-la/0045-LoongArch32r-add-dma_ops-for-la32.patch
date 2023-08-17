@@ -1,0 +1,424 @@
+From f99dddc53c72d6cf0843613609c57e84f85ef33e Mon Sep 17 00:00:00 2001
+From: Fanrui Meng <mengfanrui@loongson.cn>
+Date: Fri, 20 May 2022 17:19:34 +0800
+Subject: [PATCH 45/48] LoongArch32r : add dma_ops for la32.
+
+la32r's soc may not support dma_coherent feature, which need cacheflush support.
+	1. add arch_sync_dma_* func for loongarch
+	2. add dma-related config for la32r.
+
+ATTENTION: dma_cache_* api is only temporary solution ,which needs rewriting in the future.
+	   arch_sync* func is recommended.
+
+Signed-off-by: Fanrui Meng <mengfanrui@loongson.cn>
+---
+ arch/loongarch/include/asm/addrspace.h      |   3 +-
+ arch/loongarch/include/asm/cacheflush.h     | 115 +++++++++++++++++++-
+ arch/loongarch/include/asm/io.h             |  11 ++
+ arch/loongarch/loongson32/Kconfig           |   8 +-
+ arch/loongarch/loongson32/Makefile          |   1 +
+ arch/loongarch/loongson32/dma-noncoherent.c | 104 ++++++++++++++++++
+ arch/loongarch/mm/cache.c                   |  55 +++++++++-
+ 7 files changed, 290 insertions(+), 7 deletions(-)
+ create mode 100644 arch/loongarch/loongson32/dma-noncoherent.c
+
+diff --git a/arch/loongarch/include/asm/addrspace.h b/arch/loongarch/include/asm/addrspace.h
+index 83b38b634775..faa82ee0c4e4 100644
+--- a/arch/loongarch/include/asm/addrspace.h
++++ b/arch/loongarch/include/asm/addrspace.h
+@@ -32,13 +32,14 @@ extern unsigned long vm_map_base;
+ 
+ #ifdef CONFIG_32BIT
+ #define DMW_PABITS	28
++#define TO_PHYS_MASK	((1UL << DMW_PABITS) - 1)
+ #endif
+ 
+ #ifdef CONFIG_64BIT
+ #define DMW_PABITS	48
++#define TO_PHYS_MASK	((1ULL << DMW_PABITS) - 1)
+ #endif
+ 
+-#define TO_PHYS_MASK	((1ULL << DMW_PABITS) - 1)
+ 
+ /*
+  * Memory above this physical address will be considered highmem.
+diff --git a/arch/loongarch/include/asm/cacheflush.h b/arch/loongarch/include/asm/cacheflush.h
+index 214ec714a27b..08e4f36b6bd2 100644
+--- a/arch/loongarch/include/asm/cacheflush.h
++++ b/arch/loongarch/include/asm/cacheflush.h
+@@ -8,7 +8,7 @@
+ #include <linux/mm.h>
+ #include <asm/cpu-features.h>
+ #include <asm/cacheops.h>
+-
++//#include <asm/unroll.h>
+ /*
+  * This flag is used to indicate that the page pointed to by a pte
+  * is dirty and requires cleaning before returning it to the user.
+@@ -75,5 +75,118 @@ static inline void flush_dcache_line(unsigned long addr)
+ {
+ 	cache_op(Hit_Writeback_Inv_D, addr);
+ }
++#ifdef CONFIG_32BIT
++#define cache16_unroll32(base,op)                   \
++     __asm__ __volatile__(                       \
++     "   cacop %1,%0, 0x000; cacop %1, %0,0x010  ;  \n" \
++     "   cacop %1,%0, 0x020; cacop %1, %0,0x030  ;  \n" \
++     "   cacop %1,%0, 0x040; cacop %1, %0,0x050  ;  \n" \
++     "   cacop %1,%0, 0x060; cacop %1, %0,0x070  ;  \n" \
++     "   cacop %1,%0, 0x080; cacop %1, %0,0x090  ;  \n" \
++     "   cacop %1,%0, 0x0a0; cacop %1, %0,0x0b0  ;  \n" \
++     "   cacop %1,%0, 0x0c0; cacop %1, %0,0x0d0  ;  \n" \
++     "   cacop %1,%0, 0x0e0; cacop %1, %0,0x0f0  ;  \n" \
++     "   cacop %1,%0, 0x100; cacop %1, %0,0x110  ;  \n" \
++     "   cacop %1,%0, 0x120; cacop %1, %0,0x130  ;  \n" \
++     "   cacop %1,%0, 0x140; cacop %1, %0,0x150  ;  \n" \
++     "   cacop %1,%0, 0x160; cacop %1, %0,0x170  ;  \n" \
++     "   cacop %1,%0, 0x180; cacop %1, %0,0x190  ;  \n" \
++     "   cacop %1,%0, 0x1a0; cacop %1, %0,0x1b0  ;  \n" \
++     "   cacop %1,%0, 0x1c0; cacop %1, %0,0x1d0  ;  \n" \
++     "   cacop %1,%0, 0x1e0; cacop %1, %0,0x1f0  ;  \n" \
++         :                           \
++         : "r" (base),                       \
++           "i" (op));
++
++#define cache32_unroll32(base,op)                   \
++     __asm__ __volatile__(                       \
++     "   cacop %1, %0,0x000; cacop %1, %0,0x020  ;  \n" \
++     "   cacop %1, %0,0x040; cacop %1, %0,0x060  ;  \n" \
++     "   cacop %1, %0,0x080; cacop %1, %0,0x0a0  ;  \n" \
++     "   cacop %1, %0,0x0c0; cacop %1, %0,0x0e0  ;  \n" \
++     "   cacop %1, %0,0x100; cacop %1, %0,0x120  ;  \n" \
++     "   cacop %1, %0,0x140; cacop %1, %0,0x160  ;  \n" \
++     "   cacop %1, %0,0x180; cacop %1, %0,0x1a0  ;  \n" \
++     "   cacop %1, %0,0x1c0; cacop %1, %0,0x1e0  ;  \n" \
++     "   cacop %1, %0,0x200; cacop %1, %0,0x220  ;  \n" \
++     "   cacop %1, %0,0x240; cacop %1, %0,0x260  ;  \n" \
++     "   cacop %1, %0,0x280; cacop %1, %0,0x2a0  ;  \n" \
++     "   cacop %1, %0,0x2c0; cacop %1, %0,0x2e0  ;  \n" \
++     "   cacop %1, %0,0x300; cacop %1, %0,0x320  ;  \n" \
++     "   cacop %1, %0,0x340; cacop %1, %0,0x360  ;  \n" \
++     "   cacop %1, %0,0x380; cacop %1, %0,0x3a0  ;  \n" \
++     "   cacop %1, %0,0x3c0; cacop %1, %0,0x3e0  ;  \n" \
++         :                           \
++         : "r" (base),                       \
++           "i" (op));
++
++/* build blast_xxx, blast_xxx_page, blast_xxx_page_indexed */
++#define __BUILD_BLAST_CACHE(pfx, desc, indexop, hitop, lsize, extra)    \
++ static inline void extra##blast_##pfx##cache##lsize(void)       \
++ {                                   \
++     unsigned long start = 0xa0000000 ;               \
++     unsigned long end = start + current_cpu_data.desc.waysize;  \
++     unsigned long ws_inc = 1UL << current_cpu_data.desc.waybit; \
++     unsigned long ws_end = current_cpu_data.desc.ways <<        \
++                    current_cpu_data.desc.waybit;        \
++     unsigned long ws, addr;                     \
++                                     \
++     for (ws = 0; ws < ws_end; ws += ws_inc)             \
++         for (addr = start; addr < end; addr += lsize * 32)  \
++       cache##lsize##_unroll32(addr|ws, indexop);  \
++ }                                   \
++                                     \
++ static inline void extra##blast_##pfx##cache##lsize##_page(unsigned long page) \
++ {                                   \
++     unsigned long start = page;                 \
++     unsigned long end = page + PAGE_SIZE;               \
++                                     \
++     do {                                \
++         cache##lsize##_unroll32(start, hitop);          \
++         start += lsize * 32;                    \
++     } while (start < end);                      \
++ }                                   \
++                                     \
++static inline void extra##blast_##pfx##cache##lsize##_page_indexed(unsigned long page) \
++ {                                   \
++     unsigned long indexmask = current_cpu_data.desc.waysize - 1;    \
++     unsigned long start = 0xa0000000 + (page & indexmask);      \
++     unsigned long end = start + PAGE_SIZE;              \
++     unsigned long ws_inc = 1UL << current_cpu_data.desc.waybit; \
++     unsigned long ws_end = current_cpu_data.desc.ways <<        \
++                    current_cpu_data.desc.waybit;        \
++     unsigned long ws, addr;                     \
++                                     \
++     for (ws = 0; ws < ws_end; ws += ws_inc)             \
++         for (addr = start; addr < end; addr += lsize * 32)  \
++ cache##lsize##_unroll32(addr|ws, indexop);  \
++ }
++
++ __BUILD_BLAST_CACHE(d, dcache, Index_Writeback_Inv_D, Hit_Writeback_Inv_D, 16, )
++ __BUILD_BLAST_CACHE(i, icache, Index_Invalidate_I, Hit_Invalidate_I, 16, )
++ __BUILD_BLAST_CACHE(d, dcache, Index_Writeback_Inv_D, Hit_Writeback_Inv_D, 32, )
++ __BUILD_BLAST_CACHE(i, icache, Index_Invalidate_I, Hit_Invalidate_I, 32, )
++
++/* build blast_xxx_range, protected_blast_xxx_range */
++ #define __BUILD_BLAST_CACHE_RANGE(pfx, desc, hitop, prot, extra)    \
++ static inline void prot##extra##blast_##pfx##cache##_range(unsigned long start, \
++                             unsigned long end)  \
++ {                                   \
++     unsigned long lsize = cpu_##desc##_line_size();         \
++     unsigned long addr = start & ~(lsize - 1);          \
++     unsigned long aend = (end - 1) & ~(lsize - 1);          \
++                                     \
++     while (1) {                         \
++         prot##cache_op(hitop, addr);                \
++         if (addr == aend)                   \
++             break;                      \
++         addr += lsize;                      \
++     }                               \
++ }
++
++__BUILD_BLAST_CACHE_RANGE(d, dcache, Hit_Writeback_Inv_D, , )
++__BUILD_BLAST_CACHE_RANGE(i, icache, Hit_Invalidate_I, , )
++__BUILD_BLAST_CACHE_RANGE(inv_d, dcache, Hit_Writeback_Inv_D , , )
+ 
++#endif
+ #endif /* _ASM_CACHEFLUSH_H */
+diff --git a/arch/loongarch/include/asm/io.h b/arch/loongarch/include/asm/io.h
+index 13b2135ac444..f86702ee7d77 100644
+--- a/arch/loongarch/include/asm/io.h
++++ b/arch/loongarch/include/asm/io.h
+@@ -67,6 +67,17 @@ static inline void __iomem *ioremap_prot(phys_addr_t offset, unsigned long size,
+ 	return (void __iomem *)(unsigned long)(IO_BASE + offset);
+ }
+ 
++#ifdef CONFIG_DMA_NONCOHERENT
++
++extern void (*_dma_cache_wback_inv)(unsigned long start, unsigned long size);
++extern void (*_dma_cache_wback)(unsigned long start, unsigned long size);
++extern void (*_dma_cache_inv)(unsigned long start, unsigned long size);
++
++#define dma_cache_wback_inv(start, size)    _dma_cache_wback_inv(start, size)
++#define dma_cache_wback(start, size)        _dma_cache_wback(start, size)
++#define dma_cache_inv(start, size)      _dma_cache_inv(start, size)
++#endif
++
+ /*
+  * ioremap -   map bus memory into CPU space
+  * @offset:    bus address of the memory
+diff --git a/arch/loongarch/loongson32/Kconfig b/arch/loongarch/loongson32/Kconfig
+index 7f29be8ccc04..5cf605a99061 100644
+--- a/arch/loongarch/loongson32/Kconfig
++++ b/arch/loongarch/loongson32/Kconfig
+@@ -47,7 +47,11 @@ config MACH_LOONGSON_32
+ 	select LEFI_FIRMWARE_INTERFACE
+ 	select IRQ_LOONGISA_CPU
+ 	select OF_FLATTREE
+-	#select DMA_MAYBE_COHERENT
++    select ARCH_HAS_SYNC_DMA_FOR_DEVICE
++    select DMA_NONCOHERENT
++    select ARCH_HAS_SYNC_DMA_FOR_CPU
++    select ARCH_HAS_DMA_SET_UNCACHED
++#select DMA_MAYBE_COHERENT
+ 
+ endchoice
+ 
+@@ -63,4 +67,6 @@ config LOONGSON_MC146818
+ config LEFI_FIRMWARE_INTERFACE
+ 	bool
+ 
++config DMA_NONCOHERENT
++     bool
+ #endif # MACH_LOONGARCH32
+diff --git a/arch/loongarch/loongson32/Makefile b/arch/loongarch/loongson32/Makefile
+index 9a48e4063b8e..a4b7d4133d54 100644
+--- a/arch/loongarch/loongson32/Makefile
++++ b/arch/loongarch/loongson32/Makefile
+@@ -9,3 +9,4 @@ obj-$(CONFIG_SMP)	+= smp.o
+ obj-$(CONFIG_PCI_MSI)	+= msi.o
+ 
+ obj-$(CONFIG_EARLY_PRINTK)	+= early_printk.o
++obj-$(CONFIG_DMA_NONCOHERENT)   += dma-noncoherent.o
+diff --git a/arch/loongarch/loongson32/dma-noncoherent.c b/arch/loongarch/loongson32/dma-noncoherent.c
+new file mode 100644
+index 000000000000..3687789bd94e
+--- /dev/null
++++ b/arch/loongarch/loongson32/dma-noncoherent.c
+@@ -0,0 +1,104 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2000  Ani Joshi <ajoshi@unixbox.com>
++ * Copyright (C) 2000, 2001, 06  Ralf Baechle <ralf@linux-mips.org>
++ * Copyright (C) 2022, Loongson Technology Corporation Limited
++ */
++#include <linux/dma-direct.h>
++#include <linux/dma-map-ops.h>
++#include <linux/highmem.h>
++
++#include <asm/cache.h>
++#include <asm/io.h>
++void *arch_dma_set_uncached(void *addr, size_t size)
++{
++	return (void *)(__pa(addr) + UNCAC_BASE);
++}
++static inline void dma_sync_virt_for_device(void *addr, size_t size,
++		enum dma_data_direction dir)
++{
++	switch (dir) {
++	case DMA_TO_DEVICE:
++		dma_cache_wback((unsigned long)addr, size);
++		break;
++	case DMA_FROM_DEVICE:
++		dma_cache_inv((unsigned long)addr, size);
++		break;
++	case DMA_BIDIRECTIONAL:
++		dma_cache_wback_inv((unsigned long)addr, size);
++		break;
++	default:
++		BUG();
++	}
++}
++
++static inline void dma_sync_virt_for_cpu(void *addr, size_t size,
++		enum dma_data_direction dir)
++{
++	switch (dir) {
++	case DMA_TO_DEVICE:
++		break;
++	case DMA_FROM_DEVICE:
++	case DMA_BIDIRECTIONAL:
++		dma_cache_inv((unsigned long)addr, size);
++		break;
++	default:
++		BUG();
++	}
++}
++
++/*
++ * A single sg entry may refer to multiple physically contiguous pages.  But
++ * we still need to process highmem pages individually.  If highmem is not
++ * configured then the bulk of this loop gets optimized out.
++ */
++static inline void dma_sync_phys(phys_addr_t paddr, size_t size,
++		enum dma_data_direction dir, bool for_device)
++{
++	struct page *page = pfn_to_page(paddr >> PAGE_SHIFT);
++	unsigned long offset = paddr & ~PAGE_MASK;
++	size_t left = size;
++
++	do {
++		size_t len = left;
++		void *addr;
++
++		if (PageHighMem(page)) {
++			if (offset + len > PAGE_SIZE)
++				len = PAGE_SIZE - offset;
++		}
++
++		addr = kmap_atomic(page);
++		if (for_device)
++			dma_sync_virt_for_device(addr + offset, len, dir);
++		else
++			dma_sync_virt_for_cpu(addr + offset, len, dir);
++		kunmap_atomic(addr);
++
++		offset = 0;
++		page++;
++		left -= len;
++	} while (left);
++}
++
++void arch_sync_dma_for_device(phys_addr_t paddr, size_t size,
++		enum dma_data_direction dir)
++{
++	dma_sync_phys(paddr, size, dir, true);
++}
++
++#ifdef CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU
++void arch_sync_dma_for_cpu(phys_addr_t paddr, size_t size,
++		enum dma_data_direction dir)
++{
++	dma_sync_phys(paddr, size, dir, false);
++}
++#endif
++
++#ifdef CONFIG_ARCH_HAS_SETUP_DMA_OPS
++void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
++		const struct iommu_ops *iommu, bool coherent)
++{
++	dev->dma_coherent = coherent;
++}
++#endif
+diff --git a/arch/loongarch/mm/cache.c b/arch/loongarch/mm/cache.c
+index 36ab8e8c6df2..a5b3cef409e9 100644
+--- a/arch/loongarch/mm/cache.c
++++ b/arch/loongarch/mm/cache.c
+@@ -67,6 +67,45 @@ static char *way_string[] = { NULL, "direct mapped", "2-way",
+ 	"13-way", "14-way", "15-way", "16-way",
+ };
+ 
++#ifdef CONFIG_32BIT
++
++/* DMA cache operations. */
++void (*_dma_cache_wback_inv)(unsigned long start, unsigned long size);
++void (*_dma_cache_wback)(unsigned long start, unsigned long size);
++void (*_dma_cache_inv)(unsigned long start, unsigned long size);
++
++static void la32_dma_cache_wback_inv(unsigned long addr, unsigned long size)
++ {
++     /* Catch bad driver code */
++     BUG_ON(size == 0);
++
++     if (size >= dcache_size) {
++         blast_dcache16();
++     } else {
++         blast_dcache_range(addr, addr + size);
++     }
++}
++
++static void la32_dma_cache_inv(unsigned long addr, unsigned long size)
++{
++    /* Catch bad driver code */
++    BUG_ON(size == 0);
++
++    if ( size >= dcache_size) {
++        blast_dcache16();
++    } else {
++        unsigned long lsize = cpu_dcache_line_size();
++        unsigned long almask = ~(lsize - 1);
++
++        cache_op(Hit_Writeback_Inv_D, addr & almask);
++        cache_op(Hit_Writeback_Inv_D, (addr + size - 1)  & almask);
++        blast_inv_dcache_range(addr, addr + size);
++    }
++
++}
++
++#endif
++
+ static void probe_pcache(void)
+ {
+ 	struct cpuinfo_loongarch *c = &current_cpu_data;
+@@ -95,10 +134,12 @@ static void probe_pcache(void)
+ 	sets  = 1 << ((config & CPUCFG18_L1D_SETS_M) >> CPUCFG18_L1D_SETS);
+ 	ways  = ((config & CPUCFG18_L1D_WAYS_M) >> CPUCFG18_L1D_WAYS) + 1;
+ 
+-	if (lsize)
+-                        c->dcache.linesz = 2 << lsize;
+-                else
+-                        c->dcache.linesz = 0;
++	if (lsize) {
++        c->dcache.linesz = 2 << lsize;
++    }
++    else {
++        c->dcache.linesz = 0;
++    }
+ 	c->dcache.sets = 64 << ((config >> 13) & 7);
+ 	c->dcache.ways = 1 + ((config >> 7) & 7);
+ 	dcache_size = c->dcache.sets *
+@@ -112,6 +153,12 @@ static void probe_pcache(void)
+ 
+ 	pr_info("Primary data cache %ldkB, %s, %s, %s, linesize %d bytes\n",
+ 		dcache_size >> 10, way_string[c->dcache.ways], "VIPT", "no aliases", c->dcache.linesz);
++#ifdef CONFIG_32BIT
++    _dma_cache_wback_inv    = la32_dma_cache_wback_inv;
++    _dma_cache_wback    = la32_dma_cache_wback_inv;
++    _dma_cache_inv      = la32_dma_cache_inv;
++#endif
++
+ }
+ 
+ void cpu_cache_init(void)
+-- 
+2.37.2
+

@@ -1,0 +1,108 @@
+From 16978be6f0f8061015c0f4a58b5e6fadabdf16cc Mon Sep 17 00:00:00 2001
+From: llcc01 <2417224420@qq.com>
+Date: Wed, 16 Aug 2023 13:14:31 +0800
+Subject: [PATCH] fit loongson platform
+
+---
+ .gitignore                          |  1 +
+ arch/loongarch/kernel/cpu-probe32.c |  7 ++++---
+ arch/loongarch/kernel/time.c        |  2 ++
+ arch/loongarch/mm/cache.c           | 13 ++++++++++++-
+ la_build.sh                         |  2 +-
+ la_objdump.sh                       |  1 +
+ 6 files changed, 21 insertions(+), 5 deletions(-)
+ create mode 100755 la_objdump.sh
+
+diff --git a/.gitignore b/.gitignore
+index 7afd412dadd2..e11c80c9c063 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -161,3 +161,4 @@ x509.genkey
+ 
+ # Documentation toolchain
+ sphinx_*/
++build_error.log
+diff --git a/arch/loongarch/kernel/cpu-probe32.c b/arch/loongarch/kernel/cpu-probe32.c
+index 89059f5edcbf..0956b98521ae 100644
+--- a/arch/loongarch/kernel/cpu-probe32.c
++++ b/arch/loongarch/kernel/cpu-probe32.c
+@@ -92,9 +92,9 @@ static void decode_configs(struct cpuinfo_loongarch *c)
+ 
+ 	asid_mask =0xff;
+ 	set_cpu_asid_mask(c, asid_mask);
+-	c->tlbsizemtlb = 0x40;
+-	c->tlbsizestlbsets = 0x100;
+-	c->tlbsizestlbways = 0x8;
++	c->tlbsizemtlb = 32;
++	c->tlbsizestlbsets = 0;
++	c->tlbsizestlbways = 0;
+ 	c->tlbsize = c->tlbsizemtlb + c->tlbsizestlbsets*  c->tlbsizestlbways;
+ }
+ 
+@@ -119,6 +119,7 @@ static inline void cpu_probe_loongson(struct cpuinfo_loongarch *c, unsigned int
+ 		c->cputype = CPU_LOONGSON32;
+ 		set_isa(c, LOONGARCH_CPU_ISA_LA32S);
+ 		__cpu_family[cpu] = "Loongson-32bit";
++		pr_info("TLB: tlbsizemtlb: %d, tlbsizestlbsets: %d, tlbsizestlbways: %d\n", c->tlbsizemtlb, c->tlbsizestlbsets, c->tlbsizestlbways);
+ 		pr_info("Standard 32-bit Loongson Processor probed\n");
+ 		break;
+ 	default: // Default to 64 bit
+diff --git a/arch/loongarch/kernel/time.c b/arch/loongarch/kernel/time.c
+index 4719310fb379..7815145221fe 100644
+--- a/arch/loongarch/kernel/time.c
++++ b/arch/loongarch/kernel/time.c
+@@ -216,6 +216,8 @@ void __init time_init(void)
+ 	else
+ 		const_clock_freq = calc_const_freq();
+ 
++	pr_info("Core: %llu Hz\n", const_clock_freq);
++
+ 	constant_clockevent_init();
+ 	constant_clocksource_init();
+ }
+diff --git a/arch/loongarch/mm/cache.c b/arch/loongarch/mm/cache.c
+index a5b3cef409e9..8b90d35c29d0 100644
+--- a/arch/loongarch/mm/cache.c
++++ b/arch/loongarch/mm/cache.c
+@@ -112,7 +112,18 @@ static void probe_pcache(void)
+ 	unsigned int lsize, sets, ways;
+ 	unsigned int config;
+ 
+-	config = 0xfe994cd3;
++	/*
++	24-22:	icache sets
++	21-19:	icache line size
++	18-16:	icache ways - 1
++
++	15-13:	dcache sets
++	12-10:	dcache line size
++	 9- 7:	dcache ways - 1
++	*/
++	config = 0xfe994cd3;//8kB, 16B line, 2-way
++
++	config = 0xFE6130D3;//8kB, 32B line, 2-way
+ 
+ 	lsize = (config >> 19) & 7;
+ 	sets  = 1 << ((config & CPUCFG17_L1I_SETS_M) >> CPUCFG17_L1I_SETS);
+diff --git a/la_build.sh b/la_build.sh
+index 7ce234a0871d..dcd690391632 100755
+--- a/la_build.sh
++++ b/la_build.sh
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ 
+-export CROSS_COMPILE=~/install-32-glibc-loongarch-novec-reduce-linux-5-14/bin/loongarch32-linux-gnu-
++export CROSS_COMPILE=loongarch32r-linux-gnusf-
+ export ARCH=loongarch
+ OUT=la_build
+ 
+diff --git a/la_objdump.sh b/la_objdump.sh
+new file mode 100755
+index 000000000000..3e22c391a0db
+--- /dev/null
++++ b/la_objdump.sh
+@@ -0,0 +1 @@
++loongarch32r-linux-gnusf-objdump -d la_build/vmlinux > la_build/vmlinux.s
+-- 
+2.37.2
+

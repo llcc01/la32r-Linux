@@ -1,0 +1,119 @@
+From 03f431ad35c783673044140c91b8b30f13b77478 Mon Sep 17 00:00:00 2001
+From: Huacai Chen <chenhuacai@loongson.cn>
+Date: Wed, 7 Apr 2021 14:11:06 +0800
+Subject: [PATCH 10/48] ACPICA: Events: Support fixed pcie wake event
+
+Some chipsets (such as Loongson's LS7A) support fixed pcie wake event
+which is defined in the PM1 block(related description can be found in
+4.8.4.1.1 PM1 Status Registers, 4.8.4.2.1 PM1 Control Registers and
+5.2.9 Fixed ACPI Description Table (FADT)), so we add code to handle it.
+
+ACPI Spec 6.4 link:
+https://uefi.org/specifications/ACPI/6.4/
+
+Signed-off-by: Jianmin Lv <lvjianmin@loongson.cn>
+Signed-off-by: Huacai Chen <chenhuacai@loongson.cn>
+---
+ drivers/acpi/acpica/evevent.c  | 17 +++++++++++------
+ drivers/acpi/acpica/hwsleep.c  | 12 ++++++++++++
+ drivers/acpi/acpica/utglobal.c |  4 ++++
+ include/acpi/actypes.h         |  3 ++-
+ 4 files changed, 29 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/acpi/acpica/evevent.c b/drivers/acpi/acpica/evevent.c
+index 35385148fedb..2340986de37b 100644
+--- a/drivers/acpi/acpica/evevent.c
++++ b/drivers/acpi/acpica/evevent.c
+@@ -140,9 +140,9 @@ static acpi_status acpi_ev_fixed_event_initialize(void)
+ 
+ 		if (acpi_gbl_fixed_event_info[i].enable_register_id != 0xFF) {
+ 			status =
+-			    acpi_write_bit_register(acpi_gbl_fixed_event_info
+-						    [i].enable_register_id,
+-						    ACPI_DISABLE_EVENT);
++			    acpi_write_bit_register(acpi_gbl_fixed_event_info[i].enable_register_id,
++						    (i == ACPI_EVENT_PCIE_WAKE) ?
++						    ACPI_ENABLE_EVENT : ACPI_DISABLE_EVENT);
+ 			if (ACPI_FAILURE(status)) {
+ 				return (status);
+ 			}
+@@ -185,6 +185,11 @@ u32 acpi_ev_fixed_event_detect(void)
+ 		return (int_status);
+ 	}
+ 
++	if (fixed_enable & ACPI_BITMASK_PCIEXP_WAKE_DISABLE)
++		fixed_enable &= ~ACPI_BITMASK_PCIEXP_WAKE_DISABLE;
++	else
++		fixed_enable |= ACPI_BITMASK_PCIEXP_WAKE_DISABLE;
++
+ 	ACPI_DEBUG_PRINT((ACPI_DB_INTERRUPTS,
+ 			  "Fixed Event Block: Enable %08X Status %08X\n",
+ 			  fixed_enable, fixed_status));
+@@ -248,9 +253,9 @@ static u32 acpi_ev_fixed_event_dispatch(u32 event)
+ 	 * and disable the event to prevent further interrupts.
+ 	 */
+ 	if (!acpi_gbl_fixed_event_handlers[event].handler) {
+-		(void)acpi_write_bit_register(acpi_gbl_fixed_event_info[event].
+-					      enable_register_id,
+-					      ACPI_DISABLE_EVENT);
++		(void)acpi_write_bit_register(acpi_gbl_fixed_event_info[event].enable_register_id,
++					      event == ACPI_EVENT_PCIE_WAKE ?
++					      ACPI_ENABLE_EVENT : ACPI_DISABLE_EVENT);
+ 
+ 		ACPI_ERROR((AE_INFO,
+ 			    "No installed handler for fixed event - %s (%u), disabling",
+diff --git a/drivers/acpi/acpica/hwsleep.c b/drivers/acpi/acpica/hwsleep.c
+index 14baa13bf848..7e7ea4c2e914 100644
+--- a/drivers/acpi/acpica/hwsleep.c
++++ b/drivers/acpi/acpica/hwsleep.c
+@@ -312,6 +312,18 @@ acpi_status acpi_hw_legacy_wake(u8 sleep_state)
+ 				    [ACPI_EVENT_SLEEP_BUTTON].
+ 				    status_register_id, ACPI_CLEAR_STATUS);
+ 
++	/* Enable pcie wake event if support */
++	if ((acpi_gbl_FADT.flags & ACPI_FADT_PCI_EXPRESS_WAKE)) {
++		(void)
++		acpi_write_bit_register(acpi_gbl_fixed_event_info
++				[ACPI_EVENT_PCIE_WAKE].
++				enable_register_id, ACPI_DISABLE_EVENT);
++		(void)
++		acpi_write_bit_register(acpi_gbl_fixed_event_info
++				[ACPI_EVENT_PCIE_WAKE].
++				status_register_id, ACPI_CLEAR_STATUS);
++	}
++
+ 	acpi_hw_execute_sleep_method(METHOD_PATHNAME__SST, ACPI_SST_WORKING);
+ 	return_ACPI_STATUS(status);
+ }
+diff --git a/drivers/acpi/acpica/utglobal.c b/drivers/acpi/acpica/utglobal.c
+index 59a48371a7bc..16f7a206fc6d 100644
+--- a/drivers/acpi/acpica/utglobal.c
++++ b/drivers/acpi/acpica/utglobal.c
+@@ -186,6 +186,10 @@ struct acpi_fixed_event_info acpi_gbl_fixed_event_info[ACPI_NUM_FIXED_EVENTS] =
+ 					ACPI_BITREG_RT_CLOCK_ENABLE,
+ 					ACPI_BITMASK_RT_CLOCK_STATUS,
+ 					ACPI_BITMASK_RT_CLOCK_ENABLE},
++	/* ACPI_EVENT_PCIE_WAKE	    */ {ACPI_BITREG_PCIEXP_WAKE_STATUS,
++					ACPI_BITREG_PCIEXP_WAKE_DISABLE,
++					ACPI_BITMASK_PCIEXP_WAKE_STATUS,
++					ACPI_BITMASK_PCIEXP_WAKE_DISABLE},
+ };
+ #endif				/* !ACPI_REDUCED_HARDWARE */
+ 
+diff --git a/include/acpi/actypes.h b/include/acpi/actypes.h
+index 92c71dfce0d5..0b6c72033487 100644
+--- a/include/acpi/actypes.h
++++ b/include/acpi/actypes.h
+@@ -714,7 +714,8 @@ typedef u32 acpi_event_type;
+ #define ACPI_EVENT_POWER_BUTTON         2
+ #define ACPI_EVENT_SLEEP_BUTTON         3
+ #define ACPI_EVENT_RTC                  4
+-#define ACPI_EVENT_MAX                  4
++#define ACPI_EVENT_PCIE_WAKE            5
++#define ACPI_EVENT_MAX                  5
+ #define ACPI_NUM_FIXED_EVENTS           ACPI_EVENT_MAX + 1
+ 
+ /*
+-- 
+2.37.2
+

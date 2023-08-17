@@ -1,0 +1,3187 @@
+From 3d0b9aa76030fc402f164a7e22809d6bee57736d Mon Sep 17 00:00:00 2001
+From: Fanrui Meng <mengfanrui@loongson.cn>
+Date: Fri, 20 May 2022 17:33:34 +0800
+Subject: [PATCH 46/48] LoongArch32r : add dmfe and ls1a-nand driver.
+
+1. add ls1a_nand driver
+2. add dmfe net driver
+3. update la32_defconfig
+
+Signed-off-by: Fanrui Meng <mengfanrui@loongson.cn>
+---
+ .../boot/dts/loongson/loongson32_ls.dts       |  142 +-
+ arch/loongarch/configs/la32_defconfig         |   12 +-
+ drivers/mtd/nand/raw/Kconfig                  |    5 +
+ drivers/mtd/nand/raw/Makefile                 |    1 +
+ drivers/mtd/nand/raw/ls1a_nand.c              | 1173 ++++++++++++
+ drivers/net/Kconfig                           |   27 +
+ drivers/net/Makefile                          |    6 +
+ drivers/net/dmfe.c                            | 1640 +++++++++++++++++
+ 8 files changed, 2913 insertions(+), 93 deletions(-)
+ create mode 100644 drivers/mtd/nand/raw/ls1a_nand.c
+ create mode 100644 drivers/net/dmfe.c
+
+diff --git a/arch/loongarch/boot/dts/loongson/loongson32_ls.dts b/arch/loongarch/boot/dts/loongson/loongson32_ls.dts
+index d7369679179a..f33c0ce23863 100644
+--- a/arch/loongarch/boot/dts/loongson/loongson32_ls.dts
++++ b/arch/loongarch/boot/dts/loongson/loongson32_ls.dts
+@@ -6,8 +6,6 @@ /{
+         #size-cells = <1>;
+ 
+         aliases {
+-                //ethernet0 = &gmac0;
+-                //ethernet1 = &gmac1;
+                 serial0 = &cpu_uart0;
+         };
+ 
+@@ -32,14 +30,14 @@ extioiic: interrupt-controller@0x1fe11600 {
+ 
+ 
+     memory {
+-                name = "memory";
+-                device_type = "memory";
+-                reg =  <0x00000000  0x08000000>;
++        name = "memory";
++        device_type = "memory";
++        reg =  <0x00000000  0x08000000>;
+         };
+ 
+ 	cpuic: interrupt-controller {
+-       		compatible = "loongson,cpu-interrupt-controller";
+-            	interrupt-controller;
++	compatible = "loongson,cpu-interrupt-controller";
++        interrupt-controller;
+ 		#interrupt-cells = <1>;
+ 	};
+ 
+@@ -49,8 +47,7 @@ soc {
+ 		#size-cells = <1>;
+ 		ranges = <0x10000000 0x10000000 0x10000000 >;
+ 
+-
+-	    cpu_uart0: serial@0x1fe001e0 {
++        cpu_uart0: serial@0x1fe001e0 {
+                         compatible = "ns16550a";
+                         reg = < 0x1fe001e0  0x10>;
+                         clock-frequency = <33000000>;
+@@ -59,89 +56,50 @@ cpu_uart0: serial@0x1fe001e0 {
+                         no-loopback-test;
+                 };
+ 
+-//     //   gmac0: ethernet@0x1ff00000 {
+-//        gmac0: dmfe@0x1ff00000{
+-//                        compatible = "dmfe";
+-//                        reg = <0x1ff00000 0x10000>;
+-//                        interrupt-parent = <&cpuic>;
+-//                        interrupts = <3>;
+-//                        interrupt-names = "macirq";
+-//                        mac-address = [ 64 48 48 48 48 60 ];/* [>mac 64:48:48:48:48:60 <]*/
+-//                        phy-mode = "rgmii";
+-//                        bus_id = <0x0>;
+-//                        phy_addr = <0xffffffff>;
+-//                        dma-mask = <0xffffffff 0xffffffff>;
+-//                };
+-//
+-//
+-//#if 0
+-//
+-//            ahci@0x1fe30000{
+-//                compatible = "snps,spear-ahci";
+-//                reg = <0x1fe30000 0x10000>;
+-//                interrupt-parent = <&cpuic>;
+-//                interrupts = <4>;
+-//                dma-mask = <0x0 0xffffffff>;
+-//            };
+-//#endif
+-//
+-//        nand@0x1fe78000{
+-//             #address-cells = <1>;
+-//             #size-cells = <1>;
+-//             compatible = "ls1a-nand";
+-//             reg = <0x1fe78000 0x4000
+-//                 0x1fd01160 0x0>;
+-//             interrupt-parent = <&cpuic>;
+-//             interrupts = <4>;
+-//             interrupt-names = "nand_irq";
+-//#if 0
+-//             dmas = <&dma0 1>;
+-//             dma-names = "nand_rw";
+-//             dma-mask = <0xffffffff 0xffffffff>;
+-// #endif
+-//             number-of-parts = <0x2>;
+-//
+-//             partition@0 {
+-//                 label = "kernel_partition";
+-//                 reg = <0x0000000 0x01400000>;
+-//             };
+-//
+-//             partition@0x01400000 {
+-//                 label = "os_partition";
+-//                 reg = <0x01400000 0x0>;
+-//             };
+-//         };
+-
+-
+-
+-                        //clock-frequency = <100000000>;
+-//
+-	    //        gmac0: ethernet@0x1f020000 {
+-//             compatible = "snps,dwmac-3.70a";
+-//             reg = <0x1f020000 0x10000>;
+-//             interrupt-parent = <&cpuic>;
+-//             interrupts = <3>;
+-//             interrupt-names = "macirq";
+-//             mac-address = [ 64 48 48 48 48 60 ];/* [>mac 64:48:48:48:48:60 <]*/
+-//             phy-mode = "rgmii";
+-//             bus_id = <0x0>;
+-//             phy_addr = <0xffffffff>;
+-//             dma-mask = <0xffffffff 0xffffffff>;
+-//         };
+-
+-
+-//                gmac1: ethernet@0x1f030000 {
+-//                        compatible = "snps,dwmac-3.70a";
+-//                        reg = <0 0x1f030000 0 0x10000>;
+-//                        interrupt-parent = <&extioiic>;
+-//                        interrupts = <119>;
+-//                        interrupt-names = "macirq";
+-//                        mac-address = [ 64 48 48 48 48 61 ];/* [>mac 64:48:48:48:48:61 <]*/
+-//                        phy-mode = "rgmii";
+-//                        bus_id = <0x1>;
+-//                        phy_addr = <0xffffffff>;
+-//                        dma-mask = <0xffffffff 0xffffffff>;
+-//		};
++        gmac0: dmfe@0x1ff00000{
++                        compatible = "dmfe";
++                        reg = <0x1ff00000 0x10000>;
++                        interrupt-parent = <&cpuic>;
++                        interrupts = <3>;
++                        interrupt-names = "macirq";
++                        mac-address = [ 64 48 48 48 48 60 ];/* [>mac 64:48:48:48:48:60 <]*/
++                        phy-mode = "rgmii";
++                        bus_id = <0x0>;
++                        phy_addr = <0xffffffff>;
++                        dma-mask = <0xffffffff 0xffffffff>;
++                };
++#if 0
++            ahci@0x1fe30000{
++                compatible = "snps,spear-ahci";
++                reg = <0x1fe30000 0x10000>;
++                interrupt-parent = <&cpuic>;
++                interrupts = <4>;
++                dma-mask = <0x0 0xffffffff>;
++            };
++#endif
++
++        nand@0x1fe78000{
++             #address-cells = <1>;
++             #size-cells = <1>;
++             compatible = "ls1a-nand";
++             reg = <0x1fe78000 0x4000
++                 0x1fd01160 0x0>;
++             interrupt-parent = <&cpuic>;
++             interrupts = <4>;
++             interrupt-names = "nand_irq";
++
++             number-of-parts = <0x2>;
++             partition@0 {
++                 label = "kernel_partition";
++                 reg = <0x0000000 0x01400000>;
++             };
++
++             partition@0x01400000 {
++                 label = "os_partition";
++                 reg = <0x01400000 0x0>;
++             };
++         };
++
+     };
+ };
+ 
+diff --git a/arch/loongarch/configs/la32_defconfig b/arch/loongarch/configs/la32_defconfig
+index fe1b73c09462..a56b31dff1bb 100644
+--- a/arch/loongarch/configs/la32_defconfig
++++ b/arch/loongarch/configs/la32_defconfig
+@@ -228,6 +228,7 @@ CONFIG_MACH_LOONGSON32=y
+ CONFIG_MACH_LOONGSON_32=y
+ CONFIG_LOONGSON_UART_BASE=y
+ CONFIG_LEFI_FIRMWARE_INTERFACE=y
++CONFIG_DMA_NONCOHERENT=y
+ # end of Machine selection
+ 
+ CONFIG_SYS_HAS_EARLY_PRINTK=y
+@@ -328,6 +329,7 @@ CONFIG_HAVE_NMI=y
+ CONFIG_HAVE_ARCH_TRACEHOOK=y
+ CONFIG_HAVE_DMA_CONTIGUOUS=y
+ CONFIG_GENERIC_SMP_IDLE_THREAD=y
++CONFIG_ARCH_HAS_DMA_SET_UNCACHED=y
+ CONFIG_HAVE_ASM_MODVERSIONS=y
+ CONFIG_HAVE_REGS_AND_STACK_ACCESS_API=y
+ CONFIG_HAVE_RSEQ=y
+@@ -418,12 +420,13 @@ CONFIG_UNIX_SCM=y
+ # CONFIG_NET_KEY is not set
+ # CONFIG_XDP_SOCKETS is not set
+ CONFIG_INET=y
+-# CONFIG_IP_MULTICAST is not set
++CONFIG_IP_MULTICAST=y
+ # CONFIG_IP_ADVANCED_ROUTER is not set
+ # CONFIG_IP_PNP is not set
+ # CONFIG_NET_IPIP is not set
+ # CONFIG_NET_IPGRE_DEMUX is not set
+ CONFIG_NET_IP_TUNNEL=y
++# CONFIG_IP_MROUTE is not set
+ # CONFIG_SYN_COOKIES is not set
+ # CONFIG_NET_IPVTI is not set
+ # CONFIG_NET_FOU is not set
+@@ -654,6 +657,7 @@ CONFIG_MTD_RAW_NAND=y
+ # Raw/parallel NAND flash controllers
+ #
+ # CONFIG_MTD_NAND_DENALI_DT is not set
++CONFIG_MTD_NAND_LS1A=y
+ # CONFIG_MTD_NAND_MXIC is not set
+ # CONFIG_MTD_NAND_GPIO is not set
+ # CONFIG_MTD_NAND_PLATFORM is not set
+@@ -757,6 +761,8 @@ CONFIG_NET_CORE=y
+ # CONFIG_TUN is not set
+ # CONFIG_TUN_VNET_CROSS_LE is not set
+ # CONFIG_VETH is not set
++# CONFIG_LS1X_GMAC is not set
++# CONFIG_GMAC_NAPI is not set
+ # CONFIG_NLMON is not set
+ # CONFIG_ARCNET is not set
+ CONFIG_ETHERNET=y
+@@ -948,6 +954,7 @@ CONFIG_WLAN_VENDOR_QUANTENNA=y
+ # end of Wireless WAN
+ 
+ # CONFIG_NET_FAILOVER is not set
++CONFIG_DMFE_MAC=y
+ # CONFIG_ISDN is not set
+ 
+ #
+@@ -1946,7 +1953,10 @@ CONFIG_BCH=y
+ CONFIG_HAS_IOMEM=y
+ CONFIG_HAS_IOPORT_MAP=y
+ CONFIG_HAS_DMA=y
++CONFIG_NEED_DMA_MAP_STATE=y
+ CONFIG_DMA_DECLARE_COHERENT=y
++CONFIG_ARCH_HAS_SYNC_DMA_FOR_DEVICE=y
++CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU=y
+ # CONFIG_DMA_API_DEBUG is not set
+ CONFIG_DQL=y
+ CONFIG_NLATTR=y
+diff --git a/drivers/mtd/nand/raw/Kconfig b/drivers/mtd/nand/raw/Kconfig
+index 630728de4b7c..37fde96138c7 100644
+--- a/drivers/mtd/nand/raw/Kconfig
++++ b/drivers/mtd/nand/raw/Kconfig
+@@ -46,6 +46,11 @@ config MTD_NAND_OMAP2
+ 	  Support for NAND flash on Texas Instruments OMAP2, OMAP3, OMAP4
+ 	  and Keystone platforms.
+ 
++config MTD_NAND_LS1A
++     tristate "Support for NAND on LS1A SOC"
++     help
++       This enables the NAND flash controller on the LS1A SoC.
++
+ config MTD_NAND_OMAP_BCH
+ 	depends on MTD_NAND_OMAP2
+ 	bool "Support hardware based BCH error correction"
+diff --git a/drivers/mtd/nand/raw/Makefile b/drivers/mtd/nand/raw/Makefile
+index 2f97958c3a33..d612b5bb4858 100644
+--- a/drivers/mtd/nand/raw/Makefile
++++ b/drivers/mtd/nand/raw/Makefile
+@@ -2,6 +2,7 @@
+ 
+ obj-$(CONFIG_MTD_RAW_NAND)		+= nand.o
+ obj-$(CONFIG_MTD_SM_COMMON) 		+= sm_common.o
++obj-$(CONFIG_MTD_NAND_LS1A)		+= ls1a_nand.o
+ 
+ obj-$(CONFIG_MTD_NAND_CAFE)		+= cafe_nand.o
+ obj-$(CONFIG_MTD_NAND_AMS_DELTA)	+= ams-delta.o
+diff --git a/drivers/mtd/nand/raw/ls1a_nand.c b/drivers/mtd/nand/raw/ls1a_nand.c
+new file mode 100644
+index 000000000000..418af7fbd186
+--- /dev/null
++++ b/drivers/mtd/nand/raw/ls1a_nand.c
+@@ -0,0 +1,1173 @@
++#include <linux/module.h>
++#include <linux/init.h>
++#include <linux/interrupt.h>
++#include <linux/platform_device.h>
++#include <linux/dma-mapping.h>
++#include <linux/delay.h>
++#include <linux/clk.h>
++#include <linux/mtd/mtd.h>
++#include <linux/mtd/rawnand.h>
++#include <linux/mtd/partitions.h>
++#include <linux/io.h>
++#include <linux/irq.h>
++#include <asm/dma.h>
++//#define CONFIG_MACH_LS1A 0
++//#define CONFIG_MACH_LS1B 0
++#define CONFIG_MACH_LS232 1
++
++#define DMA_ACCESS_ADDR     0x1fe78040
++#define ORDER_REG_ADDR      ((0x9fd01160))
++#define MAX_BUFF_SIZE	4096
++#define PAGE_SHIFT      12
++
++
++#ifdef CONFIG_MACH_LS1B
++#define NO_SPARE_ADDRH(x)   ((x) >> (32 - (PAGE_SHIFT - 1 )))
++#define NO_SPARE_ADDRL(x)   ((x) << (PAGE_SHIFT - 1))
++#define SPARE_ADDRH(x)      ((x) >> (32 - (PAGE_SHIFT )))
++#define SPARE_ADDRL(x)      ((x) << (PAGE_SHIFT ))
++
++
++#elif defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++
++#define NO_SPARE_ADDRH(x)   (x)
++#define NO_SPARE_ADDRL(x)   0
++#define SPARE_ADDRH(x)      (x)
++#define SPARE_ADDRL(x)      0
++
++#endif
++#define ALIGN_DMA(x)       (((x)+ 3)/4)
++
++#ifdef CONFIG_MACH_LS232
++#define USE_POLL
++#endif
++#ifdef USE_POLL
++#define complete(...)
++#define wait_for_completion_timeout(...)
++#define init_completion(...)
++#define request_irq(...) (0)
++#define free_irq(...)
++#endif
++
++#define CHIP_DELAY_TIMEOUT (2*HZ/10)
++
++#define STATUS_TIME_LOOP_R  60
++#define STATUS_TIME_LOOP_WS  400
++#define STATUS_TIME_LOOP_WM  60
++#define STATUS_TIME_LOOP_E  100
++
++#define NAND_CMD        0x1
++#define NAND_ADDRL      0x2
++#define NAND_ADDRH      0x4
++#define NAND_TIMING     0x8
++#define NAND_IDL        0x10
++#define NAND_STATUS_IDL 0x20
++#define NAND_PARAM      0x40
++#define NAND_OP_NUM     0X80
++#define NAND_CS_RDY_MAP 0x100
++
++#define DMA_ORDERAD     0x1
++#define DMA_SADDR       0x2
++#define DMA_DADDR       0x4
++#define DMA_LENGTH      0x8
++#define DMA_STEP_LENGTH 0x10
++#define DMA_STEP_TIMES  0x20
++#define DMA_CMD         0x40
++#if 1
++//#if defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++#define NAND_ECC_OFF	0
++#define NAND_ECC_ON	1
++#define RAM_OP_OFF	0
++#define RAM_OP_ON	1
++#endif
++
++#define  _NAND_IDL      ( *((volatile unsigned int*)(0x9fe78010)))
++#define  _NAND_IDH       (*((volatile unsigned int*)(0x9fe78014)))
++#define  _NAND_BASE      0x9fe78000
++#define  _NAND_SET_REG(x,y)   do{*((volatile unsigned int*)(_NAND_BASE+x)) = (y);}while(0)
++#define  _NAND_READ_REG(x,y)  do{(y) =  *((volatile unsigned int*)(_NAND_BASE+x));}while(0)
++
++#define _NAND_TIMING_TO_READ    _NAND_SET_REG(0xc,0x205)
++#define _NAND_TIMING_TO_WRITE   _NAND_SET_REG(0xc,0x205)
++
++
++enum{
++    ERR_NONE        = 0,
++    ERR_DMABUSERR   = -1,
++    ERR_SENDCMD     = -2,
++    ERR_DBERR       = -3,
++    ERR_BBERR       = -4,
++};
++enum{
++    STATE_READY = 0,
++    STATE_BUSY  ,
++};
++
++static const struct mtd_partition lart_partitions[] = {
++	/* kernel */
++	{
++		.name	= "kernel",
++		.offset	= 0x0,	/* MTDPART_OFS_APPEND */
++		.size	= 0x01500000,
++	},
++	/* initial ramdisk / file system */
++	{
++		.name	= "file system",
++		.offset	= 0x01500000,	/* MTDPART_OFS_APPEND */
++		.size	= 0x02300000,	/* MTDPART_SIZ_FULL */
++	}
++};
++
++struct ls1a_nand_platform_data{
++        int enable_arbiter;
++        struct mtd_partition *parts;
++        unsigned int nr_parts;
++};
++struct ls1a_nand_cmdset {
++        uint32_t    cmd_valid:1;	//0
++	uint32_t    read:1;		//1
++	uint32_t    write:1;		//2
++	uint32_t    erase_one:1;	//3
++	uint32_t    erase_con:1;	//4
++	uint32_t    read_id:1;		//5
++	uint32_t    reset:1;		//6
++	uint32_t    read_sr:1;		//7
++	uint32_t    op_main:1;		//8
++	uint32_t    op_spare:1;		//9
++	uint32_t    done:1;		//10
++#if defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++	uint32_t    ecc_rd:1;		//11
++	uint32_t    ecc_wr:1;		//12
++	uint32_t    int_en:1;		//13
++	uint32_t    resv14:1;		//14
++	uint32_t    ram_op:1;		//15
++#elif CONFIG_MACH_LS1B
++	uint32_t    resv1:5;//11-15 reserved
++#endif
++        uint32_t    nand_rdy:4;//16-19
++        uint32_t    nand_ce:4;//20-23
++#if defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++	uint32_t    ecc_dma_req:1;         //24
++	uint32_t    nul_dma_req:1;         //25
++#endif
++        uint32_t    resv26:8;//26-31 reserved
++};
++struct ls1a_nand_dma_desc{
++        uint32_t    orderad;
++        uint32_t    saddr;
++        uint32_t    daddr;
++        uint32_t    length;
++        uint32_t    step_length;
++        uint32_t    step_times;
++        uint32_t    cmd;
++};
++struct ls1a_nand_dma_cmd{
++        uint32_t    dma_int_mask:1;
++        uint32_t    dma_int:1;
++        uint32_t    dma_sl_tran_over:1;
++        uint32_t    dma_tran_over:1;
++        uint32_t    dma_r_state:4;
++        uint32_t    dma_w_state:4;
++        uint32_t    dma_r_w:1;
++        uint32_t    dma_cmd:2;
++        uint32_t    revl:17;
++};
++struct ls1a_nand_desc{
++        uint32_t    cmd;
++        uint32_t    addrl;
++        uint32_t    addrh;
++        uint32_t    timing;
++        uint32_t    idl;//readonly
++        uint32_t    status_idh;//readonly
++        uint32_t    param;
++        uint32_t    op_num;
++        uint32_t    cs_rdy_map;
++};
++struct ls1a_nand_info {
++	struct nand_chip	nand_chip;
++
++	struct platform_device	    *pdev;
++        /* MTD data control*/
++	unsigned int 		buf_start;
++	unsigned int		buf_count;
++        /* NAND registers*/
++	void __iomem		*mmio_base;
++        struct ls1a_nand_desc   nand_regs;
++        unsigned int            nand_addrl;
++        unsigned int            nand_addrh;
++        unsigned int            nand_timing;
++        unsigned int            nand_op_num;
++        unsigned int            nand_cs_rdy_map;
++        unsigned int            nand_cmd;
++
++	/* DMA information */
++
++        struct ls1a_nand_dma_desc  dma_regs;
++        unsigned int            order_reg_addr;
++        unsigned int            dma_orderad;
++        unsigned int            dma_saddr;
++        unsigned int            dma_daddr;
++        unsigned int            dma_length;
++        unsigned int            dma_step_length;
++        unsigned int            dma_step_times;
++        unsigned int            dma_cmd;
++        int			drcmr_dat;//dma descriptor address;
++	dma_addr_t 		drcmr_dat_phys;
++        size_t                  drcmr_dat_size;
++	unsigned char		*data_buff;//dma data buffer;
++	dma_addr_t 		data_buff_phys;
++	size_t			data_buff_size;
++        unsigned long           cac_size;
++        unsigned long           num;
++        unsigned long           size;
++        struct timer_list       test_timer;
++        unsigned int            dma_ask;
++        unsigned int            dma_ask_phy;
++
++	/* relate to the command */
++	unsigned int		state;
++//	int			use_ecc;	/* use HW ECC ? */
++	size_t			data_size;	/* data size in FIFO */
++        unsigned int            cmd;
++        unsigned int            page_addr;
++        struct completion 	cmd_complete;
++        unsigned int            seqin_column;
++        unsigned int            seqin_page_addr;
++        unsigned int            timing_flag;
++        unsigned int            timing_val;
++};
++
++
++static struct nand_ecclayout_user hw_largepage_ecclayout = {
++	.eccbytes = 24,
++	.eccpos = {
++		40, 41, 42, 43, 44, 45, 46, 47,
++		48, 49, 50, 51, 52, 53, 54, 55,
++		56, 57, 58, 59, 60, 61, 62, 63},
++	.oobfree = { {2, 38} }
++};
++#define show_data_debug  0
++#define show_debug(x,y)     show_debug_msk(x,y)
++#define show_debug_msk(x,y)   do{ if(show_data_debug) {printk(KERN_ERR "%s:\n",__func__);show_data(x,y);} }while(0)
++
++static void show_data(void * base,int num)
++{
++    int i=0;
++    unsigned char *arry=( unsigned char *) base;
++    for(i=0;i<num;i++){
++        if((i % 32)==0){
++            printk(KERN_ERR "\n");
++        }
++        if((i % 16)==0){
++            printk("  ");
++        }
++        printk("%02x ",arry[i]);
++    }
++    printk(KERN_ERR "\n");
++
++}
++
++
++static int ls1a_nand_init_buff(struct ls1a_nand_info *info)
++{
++        struct platform_device *pdev = info->pdev;
++	info->data_buff = dma_alloc_coherent(&pdev->dev, MAX_BUFF_SIZE,
++				&info->data_buff_phys, GFP_KERNEL);
++        info->data_buff =  ((info->data_buff)) ;
++        printk("info->data_buff===================0x%08x\n",info->data_buff);
++	if (info->data_buff == NULL) {
++		dev_err(&pdev->dev, "failed to allocate dma buffer\n");
++		return -ENOMEM;
++	}
++	info->data_buff_size = MAX_BUFF_SIZE;
++        return 0;
++}
++static int ls1a_nand_ecc_calculate(struct nand_chip *chip,
++		const uint8_t *dat, uint8_t *ecc_code)
++{
++	return 0;
++}
++static int ls1a_nand_ecc_correct(struct nand_chip *chip,
++		uint8_t *dat, uint8_t *read_ecc, uint8_t *calc_ecc)
++{
++    struct mtd_info *mtd = nand_to_mtd(chip);
++	struct ls1a_nand_info *info = mtd->priv;
++	/*
++	 * Any error include ERR_SEND_CMD, ERR_DBERR, ERR_BUSERR, we
++	 * consider it as a ecc error which will tell the caller the
++	 * read fail We have distinguish all the errors, but the
++	 * nand_read_ecc only check this function return value
++	 */
++	return 0;
++}
++
++static void ls1a_nand_ecc_hwctl(struct nand_chip *chip, int mode)
++{
++	return;
++}
++
++
++
++
++static int ls1a_nand_waitfunc( struct nand_chip *this)
++{
++     unsigned char status;
++    udelay(50);
++#ifdef CONFIG_MACH_LS232
++    status = _NAND_IDH>>16;
++    return status;
++#else
++    return 0;
++#endif
++}
++static void ls1a_nand_select_chip(struct nand_chip *nand_chip, int chip)
++{
++	return;
++}
++static int ls1a_nand_dev_ready(struct nand_chip *nand_chip)
++{
++	return 1;
++}
++static void ls1a_nand_read_buf(struct nand_chip *chip, uint8_t *buf, int len)
++{
++    struct mtd_info *mtd = nand_to_mtd(chip);
++        struct ls1a_nand_info *info = mtd->priv;
++	struct ls1a_nand_dma_desc *dma_base = (volatile struct ls1a_nand_dma_desc *)(info->drcmr_dat);
++	struct ls1a_nand_desc *nand_base = (struct ls1a_nand_desc *)(info->mmio_base);
++        int i,real_len = min_t(size_t, len, info->buf_count - info->buf_start);
++//	printk("real_len:0x%x\n",real_len);
++//	printk("buf address:0x%x\n",buf);
++/*
++        if(!(info->coherent)){
++            dma_cache_inv((unsigned long)(info->data_buff),info->cac_size);
++            info->coherent = 1;
++        }
++*/
++	memcpy(buf, info->data_buff + info->buf_start, real_len);
++//printk("info->data_buff:0x%x\n",info->data_buff);
++//printk("info->data_buff:0x%x\n",(info->data_buff)[0]);
++//printk("info->buf_start:0x%x\n",info->buf_start);
++//printk("dma_base->cmd:0x%x\n",dma_base->cmd);
++//printk("nand_base->cmd:0x%x\n",nand_base->cmd);
++
++        show_debug(info->data_buff,0x40);
++
++        info->buf_start += real_len;
++}
++static u16 ls1a_nand_read_word(struct nand_chip *chip)
++{
++        struct mtd_info *mtd = nand_to_mtd(chip);
++        struct ls1a_nand_info *info = mtd->priv;
++        u16 retval = 0xFFFF;
++/*
++        if(!(info->coherent)){
++            dma_cache_inv((unsigned long)(info->data_buff),info->cac_size);
++            info->coherent = 1;
++        }
++*/
++        if(!(info->buf_start & 0x1) && info->buf_start < info->buf_count){
++            retval = *(u16 *)(info->data_buff + info->buf_start);
++        }
++        info->buf_start += 2;
++        return retval;
++
++
++}
++static uint8_t ls1a_nand_read_byte(struct nand_chip *chip)
++{
++        struct mtd_info *mtd = nand_to_mtd(chip);
++        struct ls1a_nand_info *info = mtd->priv;
++	char retval = 0xFF;
++/*
++        if(!(info->coherent)){
++            dma_cache_inv((unsigned long)(info->data_buff),info->cac_size);
++            info->coherent = 1;
++        }
++*/
++	if (info->buf_start < info->buf_count)
++		retval = info->data_buff[(info->buf_start)++];
++//    printk("%s : hello",__func__);
++    show_debug(info->data_buff,6);
++	return retval;
++}
++static void ls1a_nand_write_buf(struct nand_chip *chip,const uint8_t *buf, int len)
++{
++        int i;
++        struct mtd_info *mtd = nand_to_mtd(chip);
++        struct ls1a_nand_info *info = mtd->priv;
++	int real_len = min_t(size_t, len, info->buf_count - info->buf_start);
++
++	memcpy(info->data_buff + info->buf_start, buf, real_len);
++
++//    printk("%s : data_buff is %08x",__func__,&info->data_buff);
++
++    show_debug(info->data_buff,0x20);
++
++ //no debug this line   //           show_debug(info->data_buff+2048,0x20);
++	info->buf_start += real_len;
++}
++static int ls1a_nand_verify_buf(struct nand_chip *chip,const uint8_t *buf, int len)
++{
++       int i=0;
++        struct mtd_info *mtd = nand_to_mtd(chip);
++        struct ls1a_nand_info *info = mtd->priv;
++		return 0;
++        show_debug(info->data_buff,0x20);
++        while(len--){
++            if(buf[i++] != ls1a_nand_read_byte(chip) ){
++                printk("?????????????????????????????????????????????????????verify error...\n\n");
++                return -1;
++            }
++        }
++	return 0;
++}
++static void ls1a_nand_cmdfunc(struct nand_chip *chip, unsigned command,int column, int page_addr);
++static void ls1a_nand_init_mtd(struct mtd_info *mtd,struct ls1a_nand_info *info)
++{
++	struct nand_chip *this = &info->nand_chip;
++
++
++	this->options = NAND_CACHEPRG;  //(f->flash_width == 16) ? NAND_BUSWIDTH_16: 0;
++
++	this->legacy.waitfunc		= ls1a_nand_waitfunc;
++	this->legacy.select_chip	= ls1a_nand_select_chip;
++	this->legacy.dev_ready		= ls1a_nand_dev_ready;
++	this->legacy.cmdfunc		= ls1a_nand_cmdfunc;
++//	this->legacy.read_word		= ls1a_nand_read_word;
++	this->legacy.read_byte		= ls1a_nand_read_byte;
++	this->legacy.read_buf		= ls1a_nand_read_buf;
++	this->legacy.write_buf		= ls1a_nand_write_buf;
++//	this->legacy.verify_buf	= ls1a_nand_verify_buf;
++
++#if 0
++        this->ecc.mode		= NAND_ECC_NONE;
++#else
++    //this->ecc.algo      = NAND_ECC_ALGO_BCH;
++	this->ecc.engine_type		=   NAND_ECC_ENGINE_TYPE_NONE; //NAND_ECC_ENGINE_TYPE_SOFT;
++#endif
++	this->ecc.hwctl		= ls1a_nand_ecc_hwctl;
++	this->ecc.calculate	= ls1a_nand_ecc_calculate;
++	this->ecc.correct	= ls1a_nand_ecc_correct;
++
++//	this->ecc.layout = &hw_largepage_ecclayout;
++        mtd->owner = THIS_MODULE;
++}
++static void show_dma_regs(void *dma_regs,int flag)
++{
++    return ;
++    unsigned int *regs=dma_regs;
++    printk("\n");
++    printk("0x%08x:0x%08x\n",regs,*regs);
++    printk("0x%08x:0x%08x\n",++regs,*regs);
++    printk("0x%08x:0x%08x\n",++regs,*regs);
++    printk("0x%08x:0x%08x\n",++regs,*regs);
++    printk("0x%08x:0x%08x\n",++regs,*regs);
++    printk("0x%08x:0x%08x\n",++regs,*regs);
++    printk("0x%08x:0x%08x\n",++regs,*regs);
++    if(flag)
++    printk("0x9fd01160:0x%08x\n",*(volatile unsigned int *)0x9fd01160);
++}
++
++static void show_status_regs(struct ls1a_nand_desc *nand_base){
++#if 0
++    uint32_t tmp;
++    tmp = (volatile uint32_t )nand_base->addrl;
++    printk("nand_base->addrl is %08lx" , tmp);
++    tmp = (volatile uint32_t)nand_base->addrh;
++    printk("nand_base->addrh is %08lx" , tmp);
++    tmp = (volatile uint32_t)nand_base->timing;
++    printk("nand_base->timing is %08lx" , tmp);
++    tmp = (volatile uint32_t)nand_base->op_num;
++    printk("nand_base->op_num is %08lx" , tmp);
++    tmp = (volatile uint32_t)nand_base->cs_rdy_map;
++    printk("nand_base->cs_rdy_map is %08lx" , tmp);
++    tmp = (volatile uint32_t)nand_base->param;
++    printk("nand_base->param is %08lx" , tmp);
++    tmp = (volatile uint32_t)nand_base->cmd;
++    printk("nand_base->cmd is %08lx" , tmp);
++
++#endif
++
++}
++
++static unsigned ls1a_nand_status(struct ls1a_nand_info *info)
++{
++    return(*((volatile unsigned int*)0x9fe78000) & (0x1<<10));
++}
++#define write_z_cmd  do{                                    \
++            *((volatile unsigned int *)(0x9fe78000)) = 0;   \
++            *((volatile unsigned int *)(0x9fe78000)) = 0;   \
++            *((volatile unsigned int *)(0x9fe78000)) = 400; \
++    }while(0)
++static int nand_num=0;
++static irqreturn_t ls1a_nand_irq(int irq,void *devid)
++{
++    int status_time;
++    struct ls1a_nand_info *info = devid;
++    struct ls1a_nand_dma_desc *dma_regs = (volatile struct ls1a_nand_dma_desc *)(info->drcmr_dat);
++    struct ls1a_nand_dma_cmd *dma_cmd = (struct ls1a_nand_dma_cmd *)(&(dma_regs->cmd));
++    switch(info->cmd){
++        case NAND_CMD_READOOB:
++        case NAND_CMD_READ0:
++            status_time=STATUS_TIME_LOOP_R;
++            while(!(ls1a_nand_status(info))){
++                if(!(status_time--)){
++                    write_z_cmd;
++                    break;
++                }
++		udelay(1);
++			}
++            info->state = STATE_READY;
++            break;
++        case NAND_CMD_PAGEPROG:
++            status_time=STATUS_TIME_LOOP_WS;
++            while(!(ls1a_nand_status(info))){
++                if(!(status_time--)){
++                    write_z_cmd;
++                    nand_num++;
++                    break;
++                }
++                udelay(2);
++            }
++            info->state = STATE_READY;
++            break;
++        default:
++            break;
++    }
++    complete(&info->cmd_complete);
++    return IRQ_HANDLED;
++
++}
++/*
++ *  flags & 0x1   orderad
++ *  flags & 0x2   saddr
++ *  flags & 0x4   daddr
++ *  flags & 0x8   length
++ *  flags & 0x10  step_length
++ *  flags & 0x20  step_times
++ *  flags & 0x40  cmd
++ ***/
++static void dma_setup(unsigned int flags,struct ls1a_nand_info *info)
++{
++    struct ls1a_nand_dma_desc *dma_base = (volatile struct ls1a_nand_dma_desc *)(info->drcmr_dat);
++int status_time;
++    dma_base->orderad = (flags & DMA_ORDERAD)== DMA_ORDERAD ? info->dma_regs.orderad : info->dma_orderad;
++    dma_base->saddr = (flags & DMA_SADDR)== DMA_SADDR ? info->dma_regs.saddr : info->dma_saddr;
++    dma_base->daddr = (flags & DMA_DADDR)== DMA_DADDR ? info->dma_regs.daddr : info->dma_daddr;
++    dma_base->length = (flags & DMA_LENGTH)== DMA_LENGTH ? info->dma_regs.length: info->dma_length;
++    dma_base->step_length = (flags & DMA_STEP_LENGTH)== DMA_STEP_LENGTH ? info->dma_regs.step_length: info->dma_step_length;
++    dma_base->step_times = (flags & DMA_STEP_TIMES)== DMA_STEP_TIMES ? info->dma_regs.step_times: info->dma_step_times;
++    dma_base->cmd = (flags & DMA_CMD)== DMA_CMD ? info->dma_regs.cmd: info->dma_cmd;
++
++    if((dma_base->cmd)&(0x1 << 12)){
++        dma_cache_wback((unsigned long)(info->data_buff),info->cac_size);
++    }
++    dma_cache_wback((unsigned long)(info->drcmr_dat),0x20);
++
++    {
++    long flags;
++    local_irq_save(flags);
++    *(volatile unsigned int *)info->order_reg_addr = ((unsigned int )info->drcmr_dat_phys) | 0x1<<3;
++    while (*(volatile unsigned int *)info->order_reg_addr & 0x8 );
++
++#ifdef USE_POLL
++    while(!(ls1a_nand_status(info)));
++    info->state = STATE_READY;
++#endif
++    local_irq_restore(flags);
++    }
++}
++/**
++ *  flags & 0x1     cmd
++ *  flags & 0x2     addrl
++ *  flags & 0x4     addrh
++ *  flags & 0x8     timing
++ *  flags & 0x10    idl
++ *  flags & 0x20    status_idh
++ *  flags & 0x40    param
++ *  flags & 0x80    op_num
++ *  flags & 0x100   cs_rdy_map
++ ****/
++static void nand_setup(unsigned int flags ,struct ls1a_nand_info *info)
++{
++    int i,val1,val2,val3;
++    struct ls1a_nand_desc *nand_base = (struct ls1a_nand_desc *)(info->mmio_base);
++
++    nand_base->cmd = 0;
++    nand_base->addrl = (flags & NAND_ADDRL)==NAND_ADDRL ? info->nand_regs.addrl: info->nand_addrl;
++
++    nand_base->addrh = (flags & NAND_ADDRH)==NAND_ADDRH ? info->nand_regs.addrh: info->nand_addrh;
++
++    nand_base->timing = (flags & NAND_TIMING)==NAND_TIMING ? info->nand_regs.timing: info->nand_timing;
++
++    nand_base->op_num = (flags & NAND_OP_NUM)==NAND_OP_NUM ? info->nand_regs.op_num: info->nand_op_num;
++    nand_base->cs_rdy_map = (flags & NAND_CS_RDY_MAP)==NAND_CS_RDY_MAP ? info->nand_regs.cs_rdy_map: info->nand_cs_rdy_map;
++    nand_base->param = ((nand_base->param) & 0xc000ffff) | (nand_base->op_num << 16);
++
++    //printk("nand_setup : before cmd ,flag is %d ,info->nand_cmd is %08lx , cmd is %08lx",flags &NAND_CMD, info->nand_cmd, info->nand_regs.cmd);
++
++    if(flags & NAND_CMD){
++            nand_base->cmd = (info->nand_regs.cmd) & (~0xff);
++            nand_base->cmd = info->nand_regs.cmd;
++    }
++    else
++        nand_base->cmd = info->nand_cmd;
++
++    show_status_regs(nand_base);
++}
++static void ls1a_nand_cmdfunc(struct nand_chip *chip, unsigned command,int column, int page_addr)
++{
++        struct mtd_info *mtd = nand_to_mtd(chip);
++        struct ls1a_nand_info *info = mtd->priv;
++        unsigned cmd_prev;
++        int status_time,page_prev;
++        int timeout = CHIP_DELAY_TIMEOUT;
++        init_completion(&info->cmd_complete);
++        cmd_prev = info->cmd;
++        page_prev = info->page_addr;
++        info->cmd = command;
++        info->page_addr = page_addr;
++
++        show_dma_regs((void *)(info->mmio_base),0);
++
++        switch(command){
++            case NAND_CMD_READOOB:
++                if(info->state == STATE_BUSY){
++                    printk("nandflash chip if busy,dma_base->orderad...\n");
++                    return;
++                }
++
++                info->state = STATE_BUSY;
++                info->buf_count = mtd->oobsize;
++                info->buf_start = 0;
++                info->cac_size = info->buf_count;
++                if(info->buf_count <=0 )
++                    break;
++				dma_cache_wback_inv((unsigned long)(info->data_buff),info->cac_size);
++				info->dma_regs.cmd = 0;
++                /*nand regs set*/
++                info->nand_regs.addrh =  SPARE_ADDRH(page_addr);
++                info->nand_regs.addrl = SPARE_ADDRL(page_addr) + mtd->writesize;
++                info->nand_regs.op_num = info->buf_count;
++               /*nand cmd set */
++                info->nand_regs.cmd = 0;
++#if defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++				((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->int_en = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ram_op = RAM_OP_OFF;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ecc_rd = NAND_ECC_OFF;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ecc_wr = NAND_ECC_OFF;
++#endif
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->read = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->op_spare = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->cmd_valid = 1;
++                /*dma regs config*/
++                info->dma_regs.length =ALIGN_DMA(info->buf_count);
++                ((struct ls1a_nand_dma_cmd *)&(info->dma_regs.cmd))->dma_int_mask = 1;
++                /*dma GO set*/
++                nand_setup(NAND_ADDRL|NAND_ADDRH|NAND_OP_NUM|NAND_CMD,info);
++                dma_setup(DMA_LENGTH|DMA_CMD,info);
++                break;
++            case NAND_CMD_READ0:
++                if(info->state == STATE_BUSY){
++                    printk("nandflash chip if busy...\n");
++                    return;
++                }
++                info->state = STATE_BUSY;
++                info->buf_count = mtd->oobsize + mtd->writesize ;
++                info->buf_start =  0 ;
++                info->cac_size = info->buf_count;
++                if(info->buf_count <=0 )
++                    break;
++				dma_cache_wback_inv((unsigned long)(info->data_buff),info->cac_size);
++                info->nand_regs.addrh = SPARE_ADDRH(page_addr);
++                info->nand_regs.addrl = SPARE_ADDRL(page_addr);
++                info->nand_regs.op_num = info->buf_count;
++               /*nand cmd set */
++                info->nand_regs.cmd = 0;
++                info->dma_regs.cmd = 0;
++#if defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++				((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->int_en = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ram_op = RAM_OP_OFF;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ecc_rd = NAND_ECC_OFF;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ecc_wr = NAND_ECC_OFF;
++#endif
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->read = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->op_spare = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->op_main = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->cmd_valid = 1;
++                /*dma regs config*/
++                info->dma_regs.length = ALIGN_DMA(info->buf_count);
++                ((struct ls1a_nand_dma_cmd *)&(info->dma_regs.cmd))->dma_int_mask = 1;
++                nand_setup(NAND_ADDRL|NAND_ADDRH|NAND_OP_NUM|NAND_CMD,info);
++                dma_setup(DMA_LENGTH|DMA_CMD,info);
++                break;
++            case NAND_CMD_SEQIN:
++                if(info->state == STATE_BUSY){
++                    printk("nandflash chip if busy...\n");
++                    return;
++                }
++                info->state = STATE_BUSY;
++                info->buf_count = mtd->oobsize + mtd->writesize - column;
++                info->buf_start = 0;
++                info->seqin_column = column;
++                info->seqin_page_addr = page_addr;
++                complete(&info->cmd_complete);
++                break;
++            case NAND_CMD_PAGEPROG:
++//                info->coherent = 0;
++                if(info->state == STATE_BUSY){
++                    printk("nandflash chip if busy...\n");
++                    return;
++                }
++                info->state = STATE_BUSY;
++                if(cmd_prev != NAND_CMD_SEQIN){
++                    printk("Prev cmd don't complete...\n");
++                    break;
++                }
++                if(info->buf_count <= 0 )
++                    break;
++				info->cac_size = info->buf_count;
++                /*nand regs set*/
++                info->nand_regs.addrh =  SPARE_ADDRH(info->seqin_page_addr);
++                info->nand_regs.addrl =  SPARE_ADDRL(info->seqin_page_addr) + info->seqin_column;
++                info->nand_regs.op_num = info->buf_start;
++                /*nand cmd set */
++                info->nand_regs.cmd = 0;
++                info->dma_regs.cmd = 0;
++#if 1
++//#if defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++				((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->int_en = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ram_op = RAM_OP_OFF;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ecc_rd = NAND_ECC_OFF;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ecc_wr = NAND_ECC_OFF;
++#endif
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->write = 1;
++                if(info->seqin_column < mtd->writesize)
++                    ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->op_main = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->op_spare = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->cmd_valid = 1;
++                /*dma regs config*/
++                info->dma_regs.length = ALIGN_DMA(info->buf_start);
++                ((struct ls1a_nand_dma_cmd *)&(info->dma_regs.cmd))->dma_int_mask = 1;
++                ((struct ls1a_nand_dma_cmd *)&(info->dma_regs.cmd))->dma_r_w = 1;
++                nand_setup(NAND_ADDRL|NAND_ADDRH|NAND_OP_NUM|NAND_CMD,info);
++                dma_setup(DMA_LENGTH|DMA_CMD,info);
++                break;
++            case NAND_CMD_RESET:
++                /*Do reset op anytime*/
++//                info->state = STATE_BUSY;
++               /*nand cmd set */
++                info->nand_regs.cmd = 0;
++#if 1
++//#if defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++				((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->int_en = 0;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ram_op = RAM_OP_OFF;
++#endif
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->reset = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->cmd_valid = 1;
++                nand_setup(NAND_CMD,info);
++                status_time = STATUS_TIME_LOOP_R;
++                while(!ls1a_nand_status(info)){
++                    if(!(status_time--)){
++                        write_z_cmd;
++                        break;
++                    }
++                    udelay(50);
++                }
++//                info->state = STATE_READY;
++                complete(&info->cmd_complete);
++                break;
++            case NAND_CMD_ERASE1:
++                if(info->state == STATE_BUSY){
++                    printk("nandflash chip if busy...\n");
++                    return;
++                }
++                info->state = STATE_BUSY;
++
++                /*nand regs set*/
++                info->nand_regs.addrh =  NO_SPARE_ADDRH(page_addr);
++                info->nand_regs.addrl =  NO_SPARE_ADDRL(page_addr) ;
++               /*nand cmd set */
++                info->nand_regs.cmd = 0;
++#if 1
++//#if defined(CONFIG_MACH_LS1A) || defined(CONFIG_MACH_LS232)
++				((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->int_en = 0;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->ram_op = RAM_OP_OFF;
++#endif
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->erase_one = 1;
++                ((struct ls1a_nand_cmdset*)&(info->nand_regs.cmd))->cmd_valid = 1;
++                nand_setup(NAND_ADDRL|NAND_ADDRH|NAND_OP_NUM|NAND_CMD,info);
++                status_time = STATUS_TIME_LOOP_E;
++                udelay(2000);
++                while(!ls1a_nand_status(info)){
++                    if(!(status_time--)){
++                        write_z_cmd;
++                        break;
++                    }
++                    udelay(50);
++                }
++                complete(&info->cmd_complete);
++                info->state = STATE_READY;
++                break;
++            case NAND_CMD_STATUS:
++                if(info->state == STATE_BUSY){
++                    printk("nandflash chip if busy...\n");
++                    return;
++                }
++                info->state = STATE_BUSY;
++                info->buf_count = 0x1;
++                info->buf_start = 0x0;
++                *(unsigned char *)info->data_buff=ls1a_nand_status(info) | 0x80;
++                complete(&info->cmd_complete);
++                info->state = STATE_READY;
++                break;
++            case NAND_CMD_READID:
++                if(info->state == STATE_BUSY){
++                    printk("nandflash chip if busy...\n");
++                    return;
++                }
++                info->state = STATE_BUSY;
++                info->buf_count = 0x5;
++                info->buf_start = 0;
++
++
++               {
++
++                   unsigned int id_val_l=0,id_val_h=0;
++                   unsigned char *data = (unsigned char *)(info->data_buff);
++#ifdef	LS1B01
++                    unsigned int timing = 0;
++                   _NAND_READ_REG(0xc,timing);
++                   _NAND_SET_REG(0xc,0x30f0);
++                   _NAND_SET_REG(0x0,0x21);
++
++                   while(((id_val_l |= _NAND_IDL) & 0xff)  == 0){
++                       id_val_h = _NAND_IDH;
++                   }
++
++                   printk("id_val_l=0x%08x\nid_val_h=0x%08x\n",id_val_l,id_val_h);
++                   _NAND_SET_REG(0xc,timing);
++#else
++		   _NAND_SET_REG(0x0,0x21);
++                   udelay(1);
++                   id_val_l = _NAND_IDL;
++                   id_val_h = _NAND_IDH;
++#endif
++                   data[0]  = (id_val_h & 0xff);
++                   data[1]  = (id_val_l & 0xff000000)>>24;
++                   data[2]  = (id_val_l & 0x00ff0000)>>16;
++                   data[3]  = (id_val_l & 0x0000ff00)>>8;
++		   data[4]  = (id_val_l & 0x000000ff);
++
++               }
++                complete(&info->cmd_complete);
++                info->state = STATE_READY;
++                break;
++            case NAND_CMD_ERASE2:
++            case NAND_CMD_READ1:
++                complete(&info->cmd_complete);
++                break;
++            case NAND_CMD_RNDOUT:
++
++                info->buf_start =  column ;
++                break;
++            default :
++                printk(KERN_ERR "non-supported command.\n");
++                complete(&info->cmd_complete);
++		break;
++        }
++        wait_for_completion_timeout(&info->cmd_complete,timeout);
++        if(info->cmd == NAND_CMD_READ0 || info->cmd == NAND_CMD_READOOB ){
++            dma_cache_inv((unsigned long)(info->data_buff),info->cac_size);
++        }
++        info->state = STATE_READY;
++
++}
++static int ls1a_nand_detect(struct mtd_info *mtd)
++{
++        return (mtd->erasesize != 1<<17 || mtd->writesize != 1<<11 || mtd->oobsize != 1<<6);
++
++}
++
++static void test_handler(struct timer_list *t)
++{
++    struct ls1a_nand_info *data = from_timer(data, t, test_timer);
++
++    u32 val;
++
++    struct ls1a_nand_info *s = (struct ls1a_nand_info *)data;
++    mod_timer(&s->test_timer, jiffies+1);
++    val = s->dma_ask_phy | 0x4;
++    *((volatile unsigned int *)0x9fd01160) = val;
++    udelay(1000);
++}
++
++
++static void ls1a_nand_init_info(struct ls1a_nand_info *info)
++{
++
++
++    *((volatile unsigned int *)0x9fe78018) = 0x08005300;
++    info->timing_flag = 1;/*0:read; 1:write;*/
++    info->num=0;
++    info->size=0;
++//    info->coherent = 0;
++    info->cac_size = 0;
++    info->state = STATE_READY;
++    info->cmd = -1;
++    info->page_addr = -1;
++    info->nand_addrl = 0x0;
++    info->nand_addrh = 0x0;
++    info->nand_timing =0x412;// 0x4<<8 | 0x12;
++ //   info->nand_timing = 0x4<<8 | 0x12;
++    info->nand_op_num = 0x0;
++ //   info->nand_cs_rdy_map = 0x00000000;
++    info->nand_cs_rdy_map = 0x88442200;
++    info->nand_cmd = 0;
++
++    info->dma_orderad = 0x0;
++    info->dma_saddr = info->data_buff_phys;
++    info->dma_daddr = DMA_ACCESS_ADDR;
++    info->dma_length = 0x0;
++    info->dma_step_length = 0x0;
++    info->dma_step_times = 0x1;
++    info->dma_cmd = 0x0;
++
++
++    timer_setup(&info->test_timer, test_handler, 0);
++//    init_timer(&info->test_timer);
++//    info->test_timer.function = test_handler;
++//    info->test_timer.expires = jiffies + 10;
++//dor    info->test_timer.data = (unsigned long)info;
++//    add_timer(&info->test_timer);
++
++
++    info->order_reg_addr = ORDER_REG_ADDR;
++}
++static int ls1a_nand_probe(struct platform_device *pdev)
++{
++        struct ls1a_nand_platform_data *pdata;
++	struct ls1a_nand_info *info;
++	struct nand_chip *this;
++	struct mtd_info *mtd;
++	struct resource *r;
++	int ret = 0, irq;
++//#ifdef CONFIG_MTD_PARTITIONS
++const char *part_probes[] = { "cmdlinepart", NULL };
++	struct mtd_partition *partitions = NULL;
++	int num_partitions = 0;
++//#endif
++
++    pdata =  devm_kzalloc(&pdev->dev,sizeof(struct ls1a_nand_platform_data),GFP_KERNEL);
++    pdata->enable_arbiter =1;
++     pdata->nr_parts = 2;
++
++
++
++
++    if (!pdata) {
++		dev_err(&pdev->dev, "no platform data defined\n");
++		return -ENODEV;
++	}
++
++	mtd = kzalloc(sizeof(struct mtd_info) + sizeof(struct ls1a_nand_info),
++			GFP_KERNEL);
++	if (!mtd) {
++		dev_err(&pdev->dev, "failed to allocate memory\n");
++		return -ENOMEM;
++	}
++    printk("ls1a_nand : mtd struct base address is %08lx",mtd);
++	info = (struct ls1a_nand_info *)(&mtd[1]);
++	info->pdev = pdev;
++
++	this = &info->nand_chip;
++    mtd = nand_to_mtd(this);
++    mtd->priv = info;
++        info->drcmr_dat =(unsigned int ) dma_alloc_coherent(&pdev->dev, MAX_BUFF_SIZE,
++				&info->drcmr_dat_phys, GFP_KERNEL);
++        info->drcmr_dat = 0xa0000000 | (info->drcmr_dat);
++        info->dma_ask =(unsigned int ) dma_alloc_coherent(&pdev->dev, MAX_BUFF_SIZE,
++				&info->dma_ask_phy, GFP_KERNEL);
++
++//        printk("info->drcmr_dat===================0x%08x\n",info->drcmr_dat);
++        if(!info->drcmr_dat){
++                dev_err(&pdev->dev,"fialed to allocate memory\n");
++                return ENOMEM;
++        }
++        r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (r == NULL) {
++		dev_err(&pdev->dev, "no IO memory resource defined\n");
++		ret = -ENODEV;
++		goto fail_put_clk;
++	}
++
++	r = request_mem_region(r->start, r->end - r->start + 1, pdev->name);
++	if (r == NULL) {
++		dev_err(&pdev->dev, "failed to request memory resource\n");
++		ret = -EBUSY;
++		goto fail_put_clk;
++	}
++
++	info->mmio_base = ioremap(r->start, r->end - r->start + 1);
++	if (info->mmio_base == NULL) {
++		dev_err(&pdev->dev, "ioremap() failed\n");
++		ret = -ENODEV;
++		goto fail_free_res;
++	}
++        ret = ls1a_nand_init_buff(info);
++	if (ret)
++		goto fail_free_io;
++
++        irq = platform_get_irq(pdev, 0);
++	if (irq < 0) {
++		dev_err(&pdev->dev, "no IRQ resource defined\n");
++		ret = -ENXIO;
++		goto fail_put_clk;
++	}
++	//ret = request_irq(irq, ls1a_nand_irq, IRQF_SHARED,pdev->name, info);
++        ret = devm_request_irq(&pdev->dev,irq,ls1a_nand_irq,UMH_DISABLED,pdev->name,info);
++	if (ret < 0) {
++		dev_err(&pdev->dev, "failed to request IRQ\n");
++		goto fail_free_buf;
++	}
++
++    ls1a_nand_init_mtd(mtd, info);
++
++    ls1a_nand_init_info(info);
++    platform_set_drvdata(pdev, mtd);
++    if (nand_scan_with_ids(this, 1 ,NULL)) {
++		dev_err(&pdev->dev, "failed to scan nand\n");
++		ret = -ENXIO;
++		goto fail_free_irq;
++	}
++        if(ls1a_nand_detect(mtd)){
++                dev_err(&pdev->dev, "driver don't support the Flash!\n");
++                ret = -ENXIO;
++                goto fail_free_irq;
++        }
++
++
++        //data = dev_get_platdata(&pdev->dev);
++        //pr_info("ls1a_nand_probe===>,data->nr_parts:%d\n",data->nr_parts);
++
++#ifdef CONFIG_MTD_PARTITIONS
++#ifdef CONFIG_MTD_CMDLINE_PARTS
++	mtd->name = "nand-flash";
++	num_partitions = parse_mtd_partitions(mtd, part_probes,&partitions, 0);
++#endif
++	if (num_partitions <= 0 )
++		{
++		  partitions = pdata->parts;
++		  num_partitions = pdata->nr_parts;
++
++		}
++         return add_mtd_partitions(mtd, partitions , num_partitions);
++#else
++                 mtd->name = "nand-flash";
++                 //num_partitions = parse_mtd_partitions(mtd, part_probes,&partitions, 0);
++                 //mtd_add_partition(mtd,"total",0,0);
++                 //mtd_add_partition(mtd,"kernel",0,0x01400000);
++                 //return mtd_add_partition(mtd,"os",0x01400000,0);
++		 //return mtd_device_register(mtd , NULL ,0 );
++                 //return mtd_device_register(mtd, pdata ? pdata->parts : NULL,pdata ? pdata->nr_parts : 0);
++                 return mtd_device_register(mtd, lart_partitions,
++                                ARRAY_SIZE(lart_partitions));
++
++#endif
++fail_free_irq:
++	free_irq(irq, info);
++fail_free_buf:
++	dma_free_coherent(&pdev->dev, info->data_buff_size,(info->data_buff), info->data_buff_phys);
++fail_free_io:
++	iounmap(info->mmio_base);
++fail_free_res:
++	release_mem_region(r->start, r->end - r->start + 1);
++fail_put_clk:
++fail_free_mtd:
++    kfree(mtd);
++	return ret;
++}
++
++static int ls1a_nand_remove(struct platform_device *pdev)
++{
++	struct mtd_info *mtd = platform_get_drvdata(pdev);
++	struct ls1a_nand_info *info = mtd->priv;
++    int irq;
++	platform_set_drvdata(pdev, NULL);
++
++    irq = platform_get_irq(pdev, 0);
++      if (irq >= 0)
++         free_irq(irq, info);
++    dma_free_coherent(&pdev->dev, info->data_buff_size, info->data_buff, info->data_buff_phys);
++
++     if (mtd) {
++         mtd_device_unregister(mtd);
++     }
++
++	return 0;
++}
++static int ls1a_nand_suspend(struct platform_device *pdev, pm_message_t pm)
++{
++	struct mtd_info *mtd = (struct mtd_info *)platform_get_drvdata(pdev);
++	struct ls1a_nand_info *info = mtd->priv;
++
++	if (info->state != STATE_READY) {
++		dev_err(&pdev->dev, "driver busy, state = %d\n", info->state);
++		return -EAGAIN;
++	}
++
++	return 0;
++}
++static int ls1a_nand_resume(struct platform_device *pdev)
++{
++	*((volatile unsigned int *)0x9fe78018) = 0x400;
++        return 0;
++}
++
++
++
++ #ifdef CONFIG_OF
++static const struct of_device_id ls_nand_dt_match[] = {
++         { .compatible = "ls1a-nand",  },
++              {},
++
++};
++ MODULE_DEVICE_TABLE(of, ls_nand_dt_match);
++#endif
++
++
++
++static struct platform_driver ls1a_nand_driver = {
++	.driver = {
++		.name	= "ls1a-nand",
++        .owner	= THIS_MODULE,
++ #ifdef CONFIG_OF
++        .of_match_table = of_match_ptr(ls_nand_dt_match),
++#endif
++
++	},
++	.probe		= ls1a_nand_probe,
++	.remove		= ls1a_nand_remove,
++	.suspend	= ls1a_nand_suspend,
++	.resume		= ls1a_nand_resume,
++};
++
++static int __init ls1a_nand_init(void)
++{
++    int ret = 0;
++    pr_info("ls1a-nand driver initializing\n");
++  //  *((volatile unsigned int *)0xbfd00420) = 0x14000000;
++    ret = platform_driver_register(&ls1a_nand_driver);
++    if(ret){
++        printk(KERN_ERR "failed to register loongson_1g_nand_driver");
++    }
++    return ret;
++}
++static void __exit ls1a_nand_exit(void)
++{
++    platform_driver_unregister(&ls1a_nand_driver);
++}
++module_init(ls1a_nand_init);
++module_exit(ls1a_nand_exit);
++MODULE_LICENSE("GPL");
++MODULE_DESCRIPTION("Loongson_1a NAND controller driver");
+diff --git a/drivers/net/Kconfig b/drivers/net/Kconfig
+index 6977f8248df7..8bf6c2691734 100644
+--- a/drivers/net/Kconfig
++++ b/drivers/net/Kconfig
+@@ -392,6 +392,25 @@ config VETH
+ 	  When one end receives the packet it appears on its pair and vice
+ 	  versa.
+ 
++config LS1X_GMAC
++     tristate "Loongson ls1x GMAC support"
++     default n
++
++ config GMAC_NAPI
++     tristate "ls1x GMAC use napi"
++     default n
++
++ config GMAC_COHERENT
++     bool "ls1x gmac coherent"
++     default n
++     depends on LS1X_GMAC
++
++ config FIX_COHERENT_UNALIGNED
++     bool "fix coherent unaligned"
++     depends on GMAC_COHERENT
++     default y
++
++
+ config VIRTIO_NET
+ 	tristate "Virtio network driver"
+ 	depends on VIRTIO
+@@ -604,4 +623,12 @@ config NET_FAILOVER
+ 	  a VM with direct attached VF by failing over to the paravirtual
+ 	  datapath when the VF is unplugged.
+ 
++config DMFE_MAC
++     tristate "LS232 SOC MAC 10/100M Fast Ethernet Adapter support"
++     help
++       This is a driver for the Fast Ethernet PCI network cards based on
++       the ITC MAC chips. If you have one of those, say Y and
++       To compile this driver as a module, choose M here: the module
++       will be called dmfe.  This is recommended.
++
+ endif # NETDEVICES
+diff --git a/drivers/net/Makefile b/drivers/net/Makefile
+index 7ffd2d03efaf..d296fd36a0b1 100644
+--- a/drivers/net/Makefile
++++ b/drivers/net/Makefile
+@@ -6,6 +6,12 @@
+ #
+ # Networking Core Drivers
+ #
++#
++
++obj-$(CONFIG_DMFE_MAC) += dmfe.o
++
++
++
+ obj-$(CONFIG_BONDING) += bonding/
+ obj-$(CONFIG_IPVLAN) += ipvlan/
+ obj-$(CONFIG_IPVTAP) += ipvlan/
+diff --git a/drivers/net/dmfe.c b/drivers/net/dmfe.c
+new file mode 100644
+index 000000000000..888cd82ac207
+--- /dev/null
++++ b/drivers/net/dmfe.c
+@@ -0,0 +1,1640 @@
++/* MAC driver
++ * 2007-11-1 created by liyunhua
++ *
++ */
++
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/compiler.h>
++#include <linux/pci.h>
++#include <linux/init.h>
++#include <linux/ioport.h>
++#include <linux/netdevice.h>
++#include <linux/etherdevice.h>
++#include <linux/rtnetlink.h>
++#include <linux/delay.h>
++#include <linux/ethtool.h>
++#include <linux/mii.h>
++#include <linux/completion.h>
++#include <linux/crc32.h>
++#include <asm/io.h>
++#include <asm/uaccess.h>
++#include <asm/irq.h>
++#include <linux/platform_device.h>
++
++#define DMFE_IO_SIZE	0x80
++
++#define	DMFE1_IRQ	0x01
++#define DMFE2_IRQ	0x02
++#define TX_DESC_CNT     0x20            /* Allocated Tx descriptors */
++#define RX_DESC_CNT     0x40            /* Allocated Rx descriptors */
++#define DESC_ALL_CNT    (TX_DESC_CNT + RX_DESC_CNT)
++#define RX_BUF_SIZE	0x620
++#define TX_BUF_ALLOC    0x600
++#define MAX_PACKET_SIZE 1514
++#define TX_MAX_SEND_CNT 0x1             /* Maximum tx packet per time */
++#define TX_FREE_DESC_CNT (TX_DESC_CNT - 2)	/* Max TX packet count */
++
++#define CR0_DEFAULT     0x00E00000      /* TX & RX burst mode  */
++#define CR6_DEFAULT     0x00080000      /* HD */
++#define CR7_DEFAULT     0x180c1         /* Interrupt enable    */
++#define CR15_DEFAULT    0x06            /* TxJabber RxWatchdog */
++#define TDES0_ERR_MASK  0x4302          /* TXJT, LC, EC, FUE   */
++
++#define DMFE_10MHF      0
++#define DMFE_100MHF     1
++#define DMFE_10MFD      4
++#define DMFE_100MFD     5
++#define DMFE_AUTO       8
++#define DMFE_1M_HPNA    0x10
++#define MAX_CHECK_PACKET 0x8000
++#define TOUT_LOOP       100000
++
++#define DMFE_TIMER_WUT  (jiffies + HZ * 1)/* timer wakeup time : 1 second */
++
++#define DMFE_MAX_MULTICAST 14
++
++#define IRQ2CHIPID(irq) irq
++#define IRQ2PHYADDR(irq) (irq + 4)	// (irq ? 1:5)
++#define TIMEOUT		3*HZ
++
++#define PCI_DM9132_ID   0x91321282      /* Davicom DM9132 ID */
++#define PCI_DM9102_ID   0x91021282      /* Davicom DM9102 ID */
++#define PCI_DM9100_ID   0x91001282      /* Davicom DM9100 ID */
++#define PCI_DM9009_ID   0x90091282      /* Davicom DM9009 ID */
++
++#define PHY_DATA_1      0x20000
++#define PHY_DATA_0      0x00000
++#define MDCLKH          0x10000
++//#define DES0_BASE       0xa0000000
++#define DES0_BASE       0x80000000
++#define dw32(reg, val)	iowrite32(val, tp->ioaddr + (reg))
++#define dr32(reg)	ioread32(tp->ioaddr + (reg))
++
++#define SHOW_MEDIA_TYPE(mode) printk(" dmfe: Change Speed to %sMhz %s duplex\n",mode & 1 ?"100":"10", mode & 4 ? "full":"half");
++
++#define CONFIG_SOC_MAC_HARDWARE_ACCELERATE  1
++//#define DBG_FLAG 1
++//#define DBG_FLAG2 1
++#define MAC_REG_BASE    0xbf005200
++#define RX_COPY_SIZE	100
++#define DM910X_RESET    1
++
++enum dmfe_offsets {
++        CSR0 = 0x00, CSR1 = 0x08, CSR2 = 0x10, CSR3 = 0x18, CSR4 = 0x20,
++        CSR5 = 0x28, CSR6 = 0x30, CSR7 = 0x38, CSR8 = 0x40, CSR9 = 0x48,
++        CSR10 = 0x50, CSR11 = 0x58, CSR12 = 0x60, CSR13 = 0x68, CSR14 = 0x70,
++        CSR15 = 0x78
++};
++enum dmfe_CR6_bits {
++        CR6_RXSC = 0x2, CR6_PBF = 0x8, CR6_PM = 0x40, CR6_PAM = 0x80,
++        CR6_FDM = 0x200, CR6_TXSC = 0x2000, CR6_STI = 0x100000,
++        CR6_SFT = 0x200000, CR6_RXA = 0x40000000, CR6_NO_PURGE = 0x20000000
++};
++
++enum dmfe_control {
++	DMFE_RESET = 0x01
++};
++
++struct tx_desc {
++        volatile u32 tdes0, tdes1, tdes2, tdes3; /* Data for the card */
++        char *tx_buf_ptr;
++        struct sk_buff *skb;               	 /* Data for us */
++        struct tx_desc *next_desc;
++} __attribute__((aligned(32)));
++
++struct rx_desc {
++        volatile u32 rdes0, rdes1, rdes2, rdes3; /* Data for the card */
++        struct sk_buff *skb;     /* Data for us */
++        struct rx_desc *next_desc;
++} __attribute__((aligned(32)));
++
++struct dmfe_private {
++	u32			chip_id;
++	struct net_device	*next_dev;
++	spinlock_t		lock;
++
++	void			*ioaddr;
++	u32			cr0_data;
++	u32			cr5_data;
++	u32			cr6_data;
++	u32			cr7_data;
++	u32			cr15_data;
++	u16			PHY_reg4;
++
++	u8			phy_addr;
++        u8 			media_mode;	/* user specify media mode */
++        u8 			op_mode;	/* real work media mode */
++	u8 			link_failed;    /* Ever link failed */
++        u8                      dm910x_chk_mode;	/* Operating mode check */
++
++	struct tx_desc		*tx_desc_head;
++	dma_addr_t		tx_desc_dma_head;
++	struct rx_desc		*rx_desc_head;
++	dma_addr_t		rx_desc_dma_head;
++
++        dma_addr_t              buf_pool_dma_ptr;	/* Tx buffer pool memory */
++	dma_addr_t              buf_pool_dma_start;	/* Tx buffer pool align dword */
++
++        unsigned char *buf_pool_ptr;	/* Tx buffer pool memory */
++	unsigned char *buf_pool_start;	/* Tx buffer pool align dword */
++	unsigned char *desc_pool_ptr;	/* descriptor pool memory */
++
++	struct tx_desc		*cpu_cur_tx;
++	struct tx_desc		*mac_cur_tx;
++	struct rx_desc		*cpu_cur_rx;
++	struct rx_desc		*mac_cur_rx;
++
++	u32			tx_packet_cnt;
++	u32			tx_queue_cnt;
++
++	u32			rx_avail_cnt;
++	u32			tx_avail_cnt;
++	u32			tx_packets;
++
++	struct timer_list	timer;
++	struct net_device_stats	stats;
++};
++
++static int ether_set=0;
++//static char hwaddr[ETH_ALEN]={0xAA, 0x02, 0x03, 0x04, 0x05, 0x06};
++static char hwaddr[ETH_ALEN]={0x00, 0x98, 0x76, 0x64, 0x32, 0x19};
++
++
++static int dmfe_open(struct net_device *dev);
++static int dmfe_start_xmit(struct sk_buff *skb, struct net_device *dev);
++static int dmfe_close(struct net_device *dev);
++static struct net_device_stats *dmfe_get_stats(struct net_device *dev);
++static void dmfe_set_filter_mode(struct net_device *dev);
++static irqreturn_t dmfe_interrupt (int irq, void *dev_instance);
++static void dmfe_hw_init(struct net_device *dev);
++static int dmfe_descriptor_init(struct net_device *dev);
++static void dmfe_set_phyxcer(struct net_device *dev);
++static u8 dmfe_sense_speed(struct net_device *dev);
++static void dmfe_process_mode(struct net_device *dev);
++static void update_csr6(u32 val, void *ioaddr);
++static void send_filter_frame(struct net_device *dev, int mc_cnt);
++static void phy_write(void *iobase, u8 phy_addr, u8 offset, u16 phy_data, u32 chip_id);
++static void dmfe_timer(struct timer_list *t);
++static u16 phy_read(void *iobase, u8 phy_addr, u8 offset, u32 chip_id);
++static void phy_write_1bit(void *ioaddr, u32 phy_data);
++static u16 phy_read_1bit(void *ioaddr);
++static void dmfe_reuse_skb(struct net_device *dev, struct sk_buff * skb);
++static inline u32 cal_CRC(unsigned char *, unsigned int, u8);
++static void allocate_rx_buffer(struct net_device *);
++
++static const struct net_device_ops dmfe_netdev_ops = {
++	.ndo_open = dmfe_open,
++	.ndo_start_xmit = dmfe_start_xmit,
++	.ndo_stop = dmfe_close,
++	.ndo_set_rx_mode = dmfe_set_filter_mode,
++	.ndo_get_stats = dmfe_get_stats,
++};
++
++/*
++ *	Calculate the CRC valude of the Rx packet
++ *	flag = 	1 : return the reverse CRC (for the received packet CRC)
++ *		0 : return the normal CRC (for Hash Table index)
++ */
++
++static inline u32 cal_CRC(unsigned char * Data, unsigned int Len, u8 flag)
++{
++	u32 crc = crc32(~0, Data, Len);
++	if (flag) crc = ~crc;
++	return crc;
++}
++
++static struct net_device *dmfe_init_one(struct device *device, void *base_addr, int irq)
++{
++	struct dmfe_private 	*tp;
++	struct net_device 	*dev;
++	int 			err;
++
++	dev = alloc_etherdev(sizeof(struct dmfe_private));
++	if (dev == NULL) {
++		printk("dmfe alloc etherdev failed\n");
++		return NULL;
++	}
++	SET_NETDEV_DEV(dev, device);
++	tp = netdev_priv(dev);
++
++	dev->irq = irq;
++	tp->ioaddr = base_addr;
++	tp->phy_addr = 0x1; //IRQ2PHYADDR(dev->irq);
++	tp->chip_id = IRQ2CHIPID(irq);
++
++	dev->netdev_ops = &dmfe_netdev_ops;
++
++	spin_lock_init(&tp->lock);
++	if(ether_set)
++	memcpy(dev->dev_addr, hwaddr, ETH_ALEN);
++	else
++	{
++                //dev->dev_addr[0] = 0x00;
++		//dev->dev_addr[1] = 0x00;
++		//dev->dev_addr[2] = 0x6c;
++		//get_random_bytes(&dev->dev_addr[3], 3);
++
++		dev->dev_addr[0] = 0x00;
++		dev->dev_addr[1] = 0x98;
++		dev->dev_addr[2] = 0x76;
++                dev->dev_addr[3] = 0x64;
++                dev->dev_addr[4] = 0x32;
++                dev->dev_addr[5] = 0x19;
++	}
++	//dev->dev_addr[5] += irq-DMFE1_IRQ;
++
++	strcpy(dev->name, "eth%d");
++	err = register_netdev(dev);
++	if (err) {
++		printk("dmfe eth driver register netdev failed\n");
++		free_netdev(dev);
++		return NULL;
++	}
++
++	return dev;
++}
++
++static unsigned int RANDOM_SEED = 0;
++
++static inline unsigned int random(unsigned int ubound)
++{
++	static unsigned int a = 1588635695,
++		q = 2,
++		r = 1117695901;
++		if(!RANDOM_SEED)RANDOM_SEED=jiffies;
++	RANDOM_SEED = a*(RANDOM_SEED % q) - r*(RANDOM_SEED / q);
++	return RANDOM_SEED % ubound;
++}
++
++static int __init setether(char *str)
++{
++int i;
++for(i=0;i<6;i++,str+=3)
++hwaddr[i]=simple_strtoul(str,0,16);
++ether_set=1;
++	return 1;
++}
++
++__setup("etheraddr=", setether);
++
++
++static u64 mask_all = 0xffffffffUL;
++
++static int dmfe_descriptor_init(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	struct tx_desc		*tx;
++	struct rx_desc		*rx;
++	struct rx_desc 		*tmp;
++	dma_addr_t		tx_dma;
++	dma_addr_t		rx_dma;
++	int	ret = 0;
++	int	i;
++	struct sk_buff		*skb;
++
++        struct tx_desc *tmp_tx;
++	struct rx_desc *tmp_rx;
++	unsigned char *tmp_buf;
++	dma_addr_t tmp_tx_dma, tmp_rx_dma;
++	dma_addr_t tmp_buf_dma;
++
++        dev->dev.coherent_dma_mask = 0xffffffffUL;
++        dev->dev.dma_mask  = &mask_all;
++	tp->tx_desc_head = (struct tx_desc*)dma_alloc_coherent(&dev->dev, sizeof(struct tx_desc)*DESC_ALL_CNT + 0x20, &tp->tx_desc_dma_head, GFP_KERNEL);
++	if (tp->tx_desc_head == NULL) {
++		ret = -ENOMEM;
++		goto no_tx_desc;
++	}
++	//tp->rx_desc_head = (struct rx_desc*)dma_alloc_coherent(NULL, sizeof(struct rx_desc)*RX_DESC_CNT, &tp->rx_desc_dma_head, GFP_ATOMIC);
++	//tp->rx_desc_head = (struct rx_desc*)dma_alloc_coherent(&dev->dev, sizeof(struct rx_desc)*RX_DESC_CNT, &tp->rx_desc_dma_head, GFP_KERNEL);
++	//if (tp->rx_desc_head == NULL) {
++	//	ret = -ENOMEM;
++	//	goto no_rx_desc;
++	//}
++        tp->rx_desc_head = (void *)tp->tx_desc_head + sizeof(struct tx_desc) * TX_DESC_CNT;
++        tp->rx_desc_dma_head = tp->tx_desc_dma_head + sizeof(struct tx_desc) * TX_DESC_CNT;
++
++        tp->buf_pool_ptr = dma_alloc_coherent(&dev->dev,TX_BUF_ALLOC * TX_DESC_CNT + 4,&tp->buf_pool_dma_ptr, GFP_KERNEL);
++	if (!tp->buf_pool_ptr) {
++		ret = -ENOMEM;
++		goto err_out_free_buf;
++	}
++    tp->buf_pool_start = tp->buf_pool_ptr;
++    tp->buf_pool_dma_start = tp->buf_pool_dma_ptr;
++#ifdef DBG_FLAG
++    printk("dmfe_descriptor_init===>tp->tx_desc_head:%x,tp->tx_desc_dma_head:%x\n",tp->tx_desc_head,tp->tx_desc_dma_head);
++    printk("dmfe_descriptor_init===>tp->rx_desc_head:%x,tp->rx_desc_dma_head:%x\n",tp->rx_desc_head,tp->rx_desc_dma_head);
++    printk("dmfe_descriptor_init===>tp->buf_pool_ptr:%x,tp->buf_pool_dma_ptr:%x\n",tp->buf_pool_ptr,tp->buf_pool_dma_ptr);
++#endif
++    tmp_buf = tp->buf_pool_start;
++    tmp_buf_dma = tp->buf_pool_dma_start;
++    tmp_tx_dma = tp->tx_desc_dma_head;
++	tx = tp->tx_desc_head;
++	tx_dma = tp->tx_desc_dma_head;
++	for (i = 0; i < TX_DESC_CNT; i++) {
++                tx->tx_buf_ptr = tmp_buf;
++		tx->tdes0 = cpu_to_le32(0);
++        tx->tdes1 = cpu_to_le32(0x81000000);
++		//tx->tdes1 = cpu_to_le32(0xE1000000);
++		tx_dma += sizeof(struct tx_desc);
++		tx->tdes3 = cpu_to_le32(tx_dma);   // point to next descriptor
++		tx->next_desc = tx + 1;
++        //dma_cache_wback((unsigned long)tx, sizeof(struct tx_desc));
++
++        tmp_buf = tmp_buf + TX_BUF_ALLOC;
++		tmp_buf_dma = tmp_buf_dma + TX_BUF_ALLOC;
++		tx++;
++		tp->tx_avail_cnt++;
++	}
++	// set the tailer point back to the header
++	(--tx)->tdes3 = cpu_to_le32(tp->tx_desc_dma_head);
++	tx->next_desc = tp->tx_desc_head;
++
++    //dma_cache_wback((unsigned long)tx, sizeof(struct tx_desc));
++    rx = tp->rx_desc_head;
++	rx_dma = tp->rx_desc_dma_head;
++	for (i = 0; i < RX_DESC_CNT; i++) {
++		rx->rdes0 = cpu_to_le32(0);
++		rx->rdes1 = cpu_to_le32(0x01000600);
++                //rx->rdes1 = cpu_to_le32(0x010007f0);
++		rx_dma += sizeof(struct rx_desc);  // point to next descriptor
++		rx->rdes3 = cpu_to_le32(rx_dma);
++
++        //dma_cache_wback((unsigned long)rx, sizeof(struct rx_desc));
++        rx->next_desc = rx + 1;
++		rx++;
++	}
++	// set the tailer point back to the header
++	(--rx)->rdes3 = cpu_to_le32(tp->rx_desc_dma_head);
++	rx->next_desc = tp->rx_desc_head;
++    //dma_cache_wback((unsigned long)rx, sizeof(struct rx_desc));
++	rx = tp->rx_desc_head;
++	// Allocate recv data buffer.
++	while (tp->rx_avail_cnt < RX_DESC_CNT) {
++		skb = dev_alloc_skb(RX_BUF_SIZE);
++		if (skb == NULL) {
++			ret = -ENOMEM;
++			goto no_rx_buf;
++		}
++		rx->skb = skb;
++		rx->rdes2 = cpu_to_le32(dma_map_single(&dev->dev, skb->data, RX_BUF_SIZE, DMA_FROM_DEVICE));
++		// set the owner bit for MAC.
++                wmb();
++		rx->rdes0 = cpu_to_le32(0x80000000);
++        //dma_cache_wback((unsigned long)rx, sizeof(struct rx_desc));
++        rx = rx->next_desc;
++		tp->rx_avail_cnt++;
++	}
++	return ret;
++
++no_rx_buf:
++	tmp = tp->rx_desc_head;
++	// free all allocated skb first.
++	while (tmp != rx) {
++		if (rx->skb) {
++			dev_kfree_skb(rx->skb);
++		}
++		tmp = tmp->next_desc;
++	}
++	// free the recv descriptor.
++
++no_rx_desc:
++    //dma_free_coherent(&dev->dev,  sizeof(struct rx_desc)*RX_DESC_CNT, tp->rx_desc_head, tp->rx_desc_dma_head);
++
++no_tx_desc:
++    dma_free_coherent(&dev->dev,  sizeof(struct tx_desc)*DESC_ALL_CNT, tp->tx_desc_head, tp->tx_desc_dma_head);
++
++err_out_free_buf:
++	dma_free_coherent(&dev->dev, TX_BUF_ALLOC * TX_DESC_CNT + 4,tp->buf_pool_ptr, tp->buf_pool_dma_ptr);
++
++	return ret;
++}
++
++static void dmfe_descriptor_free(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	struct rx_desc *rx = tp->rx_desc_head;
++
++	do {
++		if (rx->skb) {
++			dev_kfree_skb(rx->skb);
++		}
++		rx = rx->next_desc;
++	} while (rx != tp->rx_desc_head);
++
++    dma_free_coherent(&dev->dev, sizeof(struct rx_desc)*RX_DESC_CNT, tp->rx_desc_head, tp->rx_desc_dma_head);
++	dma_free_coherent(&dev->dev, sizeof(struct tx_desc)*TX_DESC_CNT, tp->tx_desc_head, tp->tx_desc_dma_head);
++}
++
++static void allocate_rx_buffer(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	struct rx_desc *rx;
++	struct sk_buff *skb;
++
++        rx = tp->rx_desc_head;
++	// Allocate recv data buffer.
++	while (tp->rx_avail_cnt < RX_DESC_CNT) {
++		skb = dev_alloc_skb(RX_BUF_SIZE);
++		if (skb == NULL) {
++			break;
++		}
++		rx->skb = skb;
++		rx->rdes2 = cpu_to_le32(dma_map_single(&dev->dev, skb->data, RX_BUF_SIZE, DMA_FROM_DEVICE));
++
++	        wmb();
++		rx->rdes0 = cpu_to_le32(0x80000000);
++
++        //dma_cache_wback((unsigned long)rx, sizeof(struct rx_desc));
++
++        rx = rx->next_desc;
++		tp->rx_avail_cnt++;
++	}
++}
++
++static int data1 = 0;
++static void dmfe_hw_init(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	u32 			tmp;
++	void		*ioaddr = tp->ioaddr;
++    int mc_count = netdev_mc_count(dev);
++
++#ifdef DBG_FLAG
++printk("dmfe_hw_init===============================================>begin\n");
++#endif
++	//tmp = readl(tp->ioaddr+CSR0);
++	/* RESET MAC */
++	//writel(DMFE_RESET | tmp, ioaddr + CSR0);
++	//udelay(1000);
++
++        /* Reset DM910x MAC controller */
++        tp->cr0_data = CR0_DEFAULT;
++	dw32(CSR0, DM910X_RESET);	/* RESET MAC */
++	udelay(1000);
++
++
++#ifdef CONFIG_SOC_MAC_HARDWARE_ACCELERATE
++	writel(1, tp->ioaddr + CSR10);
++#endif
++        dw32(CSR0, tp->cr0_data);
++	udelay(5);
++
++        tmp = dr32(CSR0);
++	//writel(0, tp->ioaddr + CSR0);
++	//udelay(5);
++
++	writel(tp->rx_desc_dma_head, tp->ioaddr+CSR3);
++	writel(tp->tx_desc_dma_head, tp->ioaddr+CSR4);
++
++	tp->media_mode = DMFE_100MFD;  // DMFE_AUTO;
++
++	if (dev->irq == DMFE1_IRQ) {
++		dmfe_set_phyxcer(dev);
++	}
++	/* Media Mode Process */
++	if (!(tp->media_mode & DMFE_AUTO))
++		tp->op_mode = tp->media_mode; 	/* Force Mode */
++
++	tp->cr5_data = readl(ioaddr + CSR5);
++	writel(tp->cr5_data, ioaddr + CSR5);
++
++	/* Init CR6 to program DM910x operation */
++	update_csr6(tp->cr6_data, tp->ioaddr+CSR6);
++
++	send_filter_frame(dev, mc_count);	/* DM9102/DM9102A */
++
++	/* Init CR7, interrupt active bit */
++	tp->cr7_data = CR7_DEFAULT;
++	writel(tp->cr7_data, tp->ioaddr + CSR7);
++
++	/* Init CR15, Tx jabber and Rx watchdog timer */
++    //	writel(tp->cr15_data, ioaddr + CSR15);
++
++	/* Enable DM910X Tx/Rx function */
++	tp->cr6_data |= CR6_RXSC | CR6_TXSC | 0x40000 | CR6_PM;  // | CR6_PBF;
++        //tp->cr6_data |= CR6_RXSC | CR6_TXSC | 0x40000;
++	update_csr6(tp->cr6_data, tp->ioaddr+CSR6);
++#ifdef DBG_FLAG
++    printk("dmfe_hw_init===============================================>end\n");
++#endif
++
++}
++
++static int dmfe_open(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++//    struct dmfe_board_info *db = netdev_priv(dev);
++    unsigned long 		flags;
++	int ret;
++
++	tp->cr6_data = 0x32003002;
++	tp->cr0_data = 0;
++	tp->PHY_reg4 = 0x1E0;
++	tp->link_failed = 1;
++
++#ifdef DBG_FLAG
++    printk("dmfe_open===============================================>\n");
++#endif
++
++	ret = request_irq(dev->irq, &dmfe_interrupt, IRQF_SHARED, dev->name, dev);
++	if (ret) {
++		printk("dmfe request_irq for %s failed\n", dev->name);
++		goto no_irq;
++	}
++
++	/* Initiliaze Transmit/Receive decriptor and CR3/4 */
++	tp->rx_avail_cnt = 0;
++	tp->tx_avail_cnt = 0;
++	tp->tx_packets = 0;
++	ret = dmfe_descriptor_init(dev);
++	if (ret < 0) {
++		printk("dmfe allocted descriptor memory failed\n");
++		goto no_desc;
++	}
++	tp->cpu_cur_tx = tp->tx_desc_head;
++	tp->mac_cur_tx = tp->tx_desc_head;
++	tp->cpu_cur_rx = tp->rx_desc_head;
++	tp->mac_cur_rx = tp->rx_desc_head;
++
++        tp->cr6_data |= CR6_SFT;	/* Store & Forward mode */
++	tp->cr0_data = 0;
++	tp->dm910x_chk_mode = 1;
++
++	spin_lock_irqsave(&tp->lock, flags);
++	dmfe_hw_init(dev);
++	netif_wake_queue(dev);
++//	init_timer(&tp->timer);
++    data1 = (unsigned long)dev;
++//	tp->timer.data = (unsigned long)dev;
++    timer_setup(&tp->timer, dmfe_timer, 0);
++    tp->timer.expires = jiffies + TIMEOUT;
++//	tp->timer.data = (unsigned long)dev;
++//	tp->timer.function = &dmfe_timer;
++	add_timer(&tp->timer);
++
++	spin_unlock_irqrestore(&tp->lock, flags);
++
++#ifdef DBG_FLAG
++    printk("dmfe_open===============================================>test1\n");
++#endif
++	return ret;
++
++no_desc:
++	free_irq(dev->irq, dev);
++no_irq:
++	return ret;
++}
++
++static int dmfe_close(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	unsigned long 		flags;
++
++#ifdef DBG_FLAG
++    printk("dmfe_close===============================================>begin\n");
++#endif
++
++	netif_stop_queue(dev);
++
++	spin_lock_irqsave(&tp->lock, flags);
++	writel(DMFE_RESET, tp->ioaddr+CSR0);
++	// disable all interrupt
++	writel(0, tp->ioaddr+CSR7);
++	phy_write(tp->ioaddr, tp->phy_addr, 0, 0x8000, tp->chip_id);
++	spin_unlock_irqrestore(&tp->lock, flags);
++
++	del_timer_sync(&tp->timer);
++	free_irq(dev->irq, dev);
++	dmfe_descriptor_free(dev);
++
++#ifdef DBG_FLAG
++    printk("dmfe_close===============================================>end\n");
++#endif
++	return 0;
++}
++
++static void dmfe_set_filter_mode(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	unsigned long		flags;
++    int mc_count = netdev_mc_count(dev);
++
++#ifdef DBG_FLAG
++    printk("dmfe_set_filter_mode===============================================>begin,dev->flags:%d\n",dev->flags);
++#endif
++
++	spin_lock_irqsave(&tp->lock, flags);
++
++	if (dev->flags & IFF_PROMISC) {
++        printk("Enable PROM Mode\n");
++		tp->cr6_data |= CR6_PM | CR6_PBF;
++		update_csr6(tp->cr6_data, tp->ioaddr+CSR6);
++		goto out;
++	}
++
++	if (dev->flags & IFF_ALLMULTI || mc_count > DMFE_MAX_MULTICAST) {
++        printk("Pass all multicast address\n");
++		tp->cr6_data &= ~(CR6_PM | CR6_PBF);
++		tp->cr6_data |= CR6_PAM;
++		goto out;
++	}
++
++	send_filter_frame(dev, mc_count);
++out:
++	spin_unlock_irqrestore(&tp->lock, flags);
++
++#ifdef DBG_FLAG
++    printk("dmfe_set_filter_mode===============================================>end\n");
++#endif
++}
++
++static netdev_tx_t dmfe_start_xmit2(struct sk_buff *skb,
++					 struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	void __iomem *ioaddr = tp->ioaddr;
++	struct tx_desc *tx;
++	unsigned long flags;
++
++	printk("dmfe_start_xmit========================>\n");
++
++	/* Too large packet check */
++	if (skb->len > MAX_PACKET_SIZE) {
++		printk("big packet = %d\n", (u16)skb->len);
++		dev_kfree_skb_any(skb);
++		return NETDEV_TX_OK;
++	}
++
++	/* Resource flag check */
++	netif_stop_queue(dev);
++
++	spin_lock_irqsave(&tp->lock, flags);
++
++	/* No Tx resource check, it never happen nromally */
++	if (tp->tx_queue_cnt >= TX_FREE_DESC_CNT) {
++		spin_unlock_irqrestore(&tp->lock, flags);
++		printk("No Tx resource %ld\n", tp->tx_queue_cnt);
++		return NETDEV_TX_BUSY;
++	}
++
++	/* Disable NIC interrupt */
++	dw32(CSR7, 0);
++
++	/* transmit this packet */
++        tx = tp->cpu_cur_tx;
++	//skb_copy_from_linear_data(skb, tx->tx_buf_ptr, skb->len);
++	tx->tdes1 = cpu_to_le32(0xe1000000 | skb->len);
++
++	/* Point to next transmit free descriptor */
++        tp->cpu_cur_tx = tx->next_desc;
++
++	/* Transmit Packet Process */
++	if ( (!tp->tx_queue_cnt) && (tp->tx_packet_cnt < TX_MAX_SEND_CNT) ) {
++		tx->tdes0 = cpu_to_le32(0x80000000);	/* Set owner bit */
++		tp->tx_packet_cnt++;			/* Ready to send */
++
++        //dma_cache_wback((unsigned long)tx, sizeof(struct tx_desc));
++
++        dw32(CSR1, 0x1);			/* Issue Tx polling */
++		netif_trans_update(dev);		/* saved time stamp */
++	} else {
++
++        //dma_cache_wback((unsigned long)tx, sizeof(struct tx_desc));
++
++        tp->tx_queue_cnt++;			/* queue TX packet */
++		dw32(CSR1, 0x1);			/* Issue Tx polling */
++	}
++
++	/* Tx resource check */
++	if ( tp->tx_queue_cnt < TX_FREE_DESC_CNT )
++		netif_wake_queue(dev);
++
++	/* Restore CR7 to enable interrupt */
++	spin_unlock_irqrestore(&tp->lock, flags);
++	dw32(CSR7, tp->cr7_data);
++
++	/* free this SKB */
++	dev_consume_skb_any(skb);
++
++	return NETDEV_TX_OK;
++}
++
++static int dmfe_start_xmit(struct sk_buff *skb, struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	struct tx_desc		*tx;
++	unsigned long		flags;
++
++#ifdef DBG_FLAG
++        printk("dmfe_start_xmit=============================================>begin\n");
++#endif
++
++	if (skb->len > MAX_PACKET_SIZE) {
++		printk("error send packet too big length = %d\n", (u16)skb->len);
++		dev_kfree_skb(skb);
++		tp->stats.tx_dropped++;
++		return 0;  //NETDEV_TX_OK;
++	}
++
++	if (tp->tx_avail_cnt <= 0) {
++		printk("no tx descriptor\n");
++		dev_kfree_skb(skb);
++		tp->stats.tx_dropped++;
++		return 0; //NETDEV_TX_BUSY;
++	}
++
++	spin_lock_irqsave(&tp->lock, flags);
++	writel(tp->cr7_data | 0x01, tp->ioaddr + CSR7);
++	tx = tp->cpu_cur_tx;
++	tp->cpu_cur_tx = tx->next_desc;
++	tp->tx_avail_cnt--;
++	tp->tx_packets++;
++	tx->skb = skb;
++        skb_copy_from_linear_data(skb, tx->tx_buf_ptr, skb->len);
++	tx->tdes2 = cpu_to_le32(dma_map_single(&dev->dev, skb->data, skb->len, DMA_TO_DEVICE));
++	tx->tdes1 = cpu_to_le32(0xE1000000 | skb->len);
++	tx->tdes0 = cpu_to_le32(0x80000000);
++    //tx->tdes0 = cpu_to_le32(DES0_BASE);
++
++    //dma_cache_wback((unsigned long)tx, sizeof(struct tx_desc));
++
++    writel(0x01, tp->ioaddr+CSR1);
++    netif_trans_update(dev);
++    udelay(1000);
++
++    /* Tx resource check */
++	//if ( tp->tx_queue_cnt < TX_FREE_DESC_CNT )
++		netif_wake_queue(dev);
++
++	spin_unlock_irqrestore(&tp->lock, flags);
++
++    /* free this SKB */
++	//dev_consume_skb_any(skb);
++
++#ifdef DBG_FLAG
++    printk("dmfe_start_xmit=============================================>end\n");
++#endif
++	return 0;
++        //return NETDEV_TX_OK;
++}
++
++static void dmfe_reuse_skb(struct net_device *dev, struct sk_buff * skb)
++{
++        struct dmfe_private 	*tp = netdev_priv(dev);
++	struct rx_desc *rx = tp->cpu_cur_rx;
++
++	if (!(rx->rdes0 & cpu_to_le32(0x80000000))) {
++		rx->skb = skb;
++		rx->rdes2 = cpu_to_le32(dma_map_single(&dev->dev, skb->data, RX_BUF_SIZE, DMA_FROM_DEVICE));
++		wmb();
++		rx->rdes0 = cpu_to_le32(0x80000000);
++
++        //dma_cache_wback((unsigned long)rx, sizeof(struct rx_desc));
++
++        tp->rx_avail_cnt++;
++		tp->cpu_cur_rx = rx->next_desc;
++	} else
++	    printk("SK Buffer reuse method error:%d\n", tp->rx_avail_cnt);
++}
++
++
++static void dmfe_rx_clean2(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	struct rx_desc *rx;
++	struct sk_buff *skb,*newskb;
++	u32	rdes0;
++	u32	rxlen;
++
++#ifdef DBG_FLAG
++    printk("dmfe_rx_clean===================================>start\n");
++#endif
++    rx = tp->mac_cur_rx;
++    while(tp->rx_avail_cnt) {
++         rdes0 = le32_to_cpu(rx->rdes0);
++	 if (rdes0 & 0x80000000)	/* packet owner check */
++		break;
++
++         tp->rx_avail_cnt--;
++	 //tp->interval_rx_cnt++;
++
++	 dma_unmap_single(&dev->dev, le32_to_cpu(rx->rdes2),
++			 RX_BUF_SIZE, DMA_FROM_DEVICE);
++
++         if((rdes0 & 0x300) != 0x300) {
++		/* A packet without First/Last flag */
++		/* reuse this SKB */
++		printk("Reuse SK buffer, rdes0:%x\n", rdes0);
++		dmfe_reuse_skb(dev, rx->skb);
++	 }
++         else
++         {
++               /* A packet with First/Last flag */
++		rxlen = ( (rdes0 >> 16) & 0x3fff) - 4;
++
++               /* error summary bit check */
++		if (rdes0 & 0x8000) {
++			/* This is a error packet */
++			dev->stats.rx_errors++;
++			if (rdes0 & 1)
++				dev->stats.rx_fifo_errors++;
++			if (rdes0 & 2)
++				dev->stats.rx_crc_errors++;
++			if (rdes0 & 0x80)
++				dev->stats.rx_length_errors++;
++		}
++
++                    if(!(rdes0 & 0x8000) || ((tp->cr6_data & CR6_PM) && (rxlen>6)) ) {
++                       skb = rx->skb;
++
++                       /* Received Packet CRC check need or not */
++			if ( (tp->dm910x_chk_mode & 1) && (cal_CRC(skb->data, rxlen, 1) !=(*(u32 *) (skb->data+rxlen) ))) { /* FIXME (?) */
++                            //if (cal_CRC(skb->data, rxlen, 1) !=(*(u32 *) (skb->data+rxlen))) {
++				/* Found a error received packet */
++				dmfe_reuse_skb(dev, rx->skb);
++				tp->dm910x_chk_mode = 3;
++                                    printk("found a error packet!\n");
++			}
++                            else
++                            {
++                                  /* Good packet, send to upper layer */
++			      /* Shorst packet used new SKB */
++			      if ((rxlen < RX_BUF_SIZE) && ((newskb = netdev_alloc_skb(dev, rxlen + 2))	!= NULL)) {
++				    skb = newskb;
++				    /* size less than COPY_SIZE, allocate a rxlen SKB */
++				    skb_reserve(skb, 2); /* 16byte align */
++				    skb_copy_from_linear_data(rx->skb, skb_put(skb, rxlen), rxlen);
++				    dmfe_reuse_skb(dev, rx->skb);
++				} else
++					skb_put(skb, rxlen);
++
++                                  skb->protocol = eth_type_trans(skb, dev);
++			      netif_rx(skb);
++			      dev->stats.rx_packets++;
++			      dev->stats.rx_bytes += rxlen;
++                            }
++                    } else {
++                            /* Reuse SKB buffer when the packet is error */
++			printk("Reuse SK buffer, rdes0:%x\n",rdes0);
++			dmfe_reuse_skb(dev,rx->skb);
++                    }
++         }
++         rx = rx->next_desc;
++    }
++    tp->mac_cur_rx = rx;
++
++#ifdef DBG_FLAG
++printk("dmfe_rx_clean===================================>end\n");
++#endif
++}
++
++
++static void dmfe_rx_clean(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	struct rx_desc *rx;
++	struct sk_buff *skb;
++	u32	rdes0;
++	u32	rxlen;
++        static   u32  ncount = 0;
++
++#ifdef DBG_FLAG
++printk("dmfe_rx_clean===================================>start\n");
++#endif
++	//rx = tp->cpu_cur_rx;
++        rx = tp->mac_cur_rx;
++	rdes0 = le32_to_cpu(rx->rdes0);
++#ifdef DBG_FLAG2
++        printk("dmfe_rx_clean===================================>rdes0:%x\n",rdes0);
++#endif
++	while (!(rdes0 & 0x80000000)) {
++		dma_unmap_single(&dev->dev, le32_to_cpu(rx->rdes2), RX_BUF_SIZE, DMA_FROM_DEVICE);
++		rxlen = ((rdes0 >> 16) & 0x3FFF) - 4;
++                ncount++;
++#ifdef DBG_FLAG2
++                printk("dmfe_rx_clean===================================>rxlen:%d,ncount:%d,rdes2:%x,rdes3:%x\n",rxlen,ncount,le32_to_cpu(rx->rdes2),le32_to_cpu(rx->rdes3));
++
++#endif
++		if ((rdes0 & 0x300) != 0x300) {
++			/* A packet without First/Last flag */
++			/* this will nerver hapen. */
++			printk("frame too long: %d bytes\n", rxlen);
++		} else {
++			if (rdes0 & 0x8000) {
++				tp->stats.rx_errors++;
++				if (rdes0 & 0x01) {
++					tp->stats.rx_fifo_errors++;
++				}
++				if (rdes0 & 0x02) {
++					tp->stats.rx_crc_errors++;
++				}
++				if (rdes0 & 0x80) {
++					tp->stats.rx_length_errors++;
++				}
++			}
++			if (!(rdes0 & 0x8000)) {
++				skb = rx->skb;
++				skb->dev = dev;
++
++#ifdef CONFIG_SOC_MAC_HARDWARE_ACCELERATE
++				skb_reserve(skb, 2);
++#endif
++				skb_put(skb, rxlen);
++				skb->protocol = eth_type_trans(skb, dev);
++				netif_rx(skb);
++//				dev->last_rx = jiffies;
++				tp->stats.rx_packets++;
++				tp->stats.rx_bytes += rxlen;
++#ifdef DBG_FLAG2
++                                printk("dmfe_rx_clean-------------------------------------skb->len:%d,skb->data_len:%d\n",skb->len,skb->data_len);
++#endif
++
++				rx->skb = dev_alloc_skb(RX_BUF_SIZE);
++				if (rx->skb == NULL) {
++					// fixme
++					panic("dmfe no memory\n");
++				}
++				rx->rdes2 = cpu_to_le32(dma_map_single(&dev->dev, rx->skb->data, RX_BUF_SIZE, DMA_FROM_DEVICE));
++			}
++		}
++                wmb();
++		rx->rdes0 = cpu_to_le32(0x80000000);
++
++        //dma_cache_wback((unsigned long)rx, sizeof(struct rx_desc));
++
++        rx = rx->next_desc;
++		rdes0 = le32_to_cpu(rx->rdes0);
++	}
++	//tp->cpu_cur_rx = rx;
++        tp->mac_cur_rx = rx;
++#ifdef DBG_FLAG
++printk("dmfe_rx_clean===================================>end\n");
++#endif
++}
++
++
++static void dmfe_tx_clean(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	struct tx_desc *tx;
++	u32 tdes0;
++
++	tx = tp->mac_cur_tx;
++
++	while (tp->tx_packets) {
++		tdes0 = le32_to_cpu(tx->tdes0);
++		if (tdes0 & 0x80000000) {
++			break;
++		}
++
++                //tp->tx_packets--;
++		tp->stats.tx_packets++;
++		if (tdes0 != 0x7FFFFFFF) {
++			tp->stats.collisions += (tdes0 >> 3) & 0xF;
++			tp->stats.tx_bytes += le32_to_cpu(tx->tdes1) & 0x7FF;
++			if (tdes0 & TDES0_ERR_MASK) {
++				tp->stats.tx_errors++;
++				if (tdes0 & 0x0002) {
++					tp->stats.tx_errors++;
++					if (!(tp->cr6_data & CR6_SFT)) {
++						tp->cr6_data = tp->cr6_data | CR6_SFT;
++						update_csr6(tp->cr6_data, tp->ioaddr+CSR6);
++					}
++				}
++				if (tdes0 & 0x0100) {
++				// need do something ?
++					;
++				}
++				if (tdes0 & 0x200) {
++				// need do something ?
++					;
++				}
++				if (tdes0 & 0x0800) {
++				// need do something ?
++					;
++				}
++				if (tdes0 & 0x4000) {
++				// need do something ?
++					;
++				}
++			}
++		}
++		if (tx->skb != NULL) {
++			dev_kfree_skb_irq(tx->skb);
++			tx->skb = NULL;
++		}
++		tx = tx->next_desc;
++		tp->tx_packets--;
++		tp->tx_avail_cnt++;
++	}
++	tp->mac_cur_tx = tx;
++	writel(0x01, tp->ioaddr+CSR1);
++        udelay(1000);
++	netif_trans_update(dev);
++
++}
++
++static irqreturn_t dmfe_interrupt (int irq, void *dev_instance)
++{
++	struct net_device 	*dev = (struct net_device *)dev_instance;
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	unsigned long 	flags;
++	int handle = IRQ_NONE;
++        u32 cr0_val;
++
++	spin_lock_irqsave(&tp->lock, flags);
++
++	tp->cr5_data =  dr32(CSR5); //readl(tp->ioaddr+CSR5);
++	dw32(CSR5, tp->cr5_data);   //writel(tp->cr5_data, tp->ioaddr+CSR5);
++        cr0_val = dr32(CSR0);
++
++	if (! (tp->cr5_data & 0xC1)) {
++		//spin_unlock_irqrestore(&tp->lock, flags);
++                //return IRQ_HANDLED;
++	}
++
++        //writel(0, ioaddr + CSR7);
++        //dw32(CSR7, 0);
++        iowrite32(0,tp->ioaddr + CSR7);
++        if (tp->cr5_data & 0x2000) {
++           printk("dmfe_interrupt--->System bus error happen.cr5 = %d\n",tp->cr5_data);
++		spin_unlock_irqrestore(&tp->lock, flags);
++                return IRQ_HANDLED;
++	}
++
++	if (tp->cr5_data & 0x40) {
++		dmfe_rx_clean(dev);
++	}
++
++	if (tp->cr5_data & 0x01) {
++		dmfe_tx_clean(dev);
++	}
++
++        /* reallocate rx descriptor buffer */
++	if (tp->rx_avail_cnt<RX_DESC_CNT)
++		allocate_rx_buffer(dev);
++
++
++        /* Mode Check */
++	if (tp->dm910x_chk_mode & 0x2) {
++		tp->dm910x_chk_mode = 0x4;
++		tp->cr6_data |= 0x100;
++		update_csr6(tp->cr6_data, tp->ioaddr);
++	}
++
++	handle = IRQ_HANDLED;
++        //writel(tp->cr7_data, ioaddr + CSR7);
++        //dw32(CSR7, tp->cr7_data);
++        iowrite32(tp->cr7_data,tp->ioaddr + CSR7);
++
++#ifdef DBG_FLAG
++    printk("dmfe_interrupt===================================>end\n");
++#endif
++	spin_unlock_irqrestore(&tp->lock, flags);
++
++	return handle;
++}
++
++
++static struct net_device_stats *dmfe_get_stats(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	return &tp->stats;
++}
++
++
++static void send_filter_frame(struct net_device *dev,int mc_cnt)
++{
++	struct dmfe_private *tp = netdev_priv(dev);
++	struct netdev_hw_addr *ha;
++	struct tx_desc *tx;
++	u16 * addrptr;
++	u32 * suptr;
++	int i;
++
++
++	tx = tp->mac_cur_tx;
++	suptr = (u32 *) tx->tx_buf_ptr;
++        for (i = 0; i < 6; i++)
++		dev->dev_addr[i] = hwaddr[i];
++
++	/* Node address */
++	addrptr = (u16 *) dev->dev_addr;
++	*suptr++ = addrptr[0];
++	*suptr++ = addrptr[1];
++	*suptr++ = addrptr[2];
++
++	/* broadcast address */
++	*suptr++ = 0xffff;
++	*suptr++ = 0xffff;
++	*suptr++ = 0xffff;
++
++	/* fit the multicast address */
++	netdev_for_each_mc_addr(ha, dev) {
++		addrptr = (u16 *) ha->addr;
++		*suptr++ = addrptr[0];
++		*suptr++ = addrptr[1];
++		*suptr++ = addrptr[2];
++	}
++
++	for (i = netdev_mc_count(dev); i < 14; i++) {
++		*suptr++ = 0xffff;
++		*suptr++ = 0xffff;
++		*suptr++ = 0xffff;
++	}
++
++	/* prepare the setup frame */
++	tp->mac_cur_tx = tx->next_desc;
++	tx->tdes1 = cpu_to_le32(0x890000c0);
++
++	/* Resource Check and Send the setup packet */
++	if (!tp->tx_packets) {
++		/* Resource Empty */
++		tp->tx_packets++;
++		tx->tdes0 = cpu_to_le32(0x80000000);
++
++        //dma_cache_wback((unsigned long)tx, sizeof(struct tx_desc));
++
++        update_csr6(tp->cr6_data | 0x2000, tp->ioaddr);
++		dw32(CSR1, 0x1);	/* Issue Tx polling */
++		update_csr6(tp->cr6_data, tp->ioaddr);
++		netif_trans_update(dev);
++	} else{
++		tp->tx_queue_cnt++;	/* Put in TX queue */
++
++        //dma_cache_wback((unsigned long)tx, sizeof(struct tx_desc));
++    }
++}
++
++static void send_filter_frame2(struct net_device *dev, int mc_cnt)
++{
++	struct dmfe_private *tp = netdev_priv(dev);
++	struct sk_buff *skb;
++	//struct dev_mc_list *mc;
++        struct netdev_hw_addr *ha;
++    struct tx_desc	*tx;
++	u8 *ptr;
++	int i;
++
++#ifdef DBG_FLAG
++        printk("send_filter_frame=================================>,tp addr:%x\n",tp);
++#endif
++	skb = dev_alloc_skb(MAX_PACKET_SIZE);
++	if (skb == NULL) {
++		printk("send filter frame failed\n");
++		return;
++	}
++	ptr = skb->data;
++	memcpy(ptr, dev->dev_addr, ETH_ALEN);
++	ptr += ETH_ALEN;
++	memset(ptr, 0xFF, ETH_ALEN);
++	ptr += ETH_ALEN;
++
++        netdev_for_each_mc_addr(ha, dev){
++		memcpy(ptr, ha->addr, ETH_ALEN);
++		ptr += ETH_ALEN;
++	}
++
++	/*for (mc = dev->mc_list, i = 0; i < mc_cnt; i++, mc = mc->next) {
++		memcpy(ptr, mc->dmi_addr, ETH_ALEN);
++		ptr += ETH_ALEN;
++	}*/
++	memset(ptr, 0xFF, 28);
++
++	tx = tp->cpu_cur_tx;
++	tp->cpu_cur_tx = tx->next_desc;
++	tx->tdes2 = cpu_to_le32(dma_map_single(&dev->dev, skb->data, RX_BUF_SIZE, DMA_TO_DEVICE));
++	tx->tdes1 = cpu_to_le32(0x890000C0);
++	tx->tdes0 = cpu_to_le32(0x80000000);
++	update_csr6(tp->cr6_data | 0x2000, tp->ioaddr);
++	dw32(CSR1, 0x1);	/* Issue Tx polling */
++	update_csr6(tp->cr6_data, tp->ioaddr);
++	netif_trans_update(dev);
++        udelay(1000);
++
++	/* wait for sending */
++    /*
++    i = 0;
++    while ((tx->tdes0 & 0x80000000) && (i<TOUT_LOOP)) {
++		udelay(1000);
++                i++;
++        printk("tx->tdes0 value is %x", tx->tdes0);
++	}
++    */
++	dev_kfree_skb(skb);
++
++}
++
++
++static void dmfe_timer(struct timer_list *t)
++{
++    struct dmfe_private *tp = from_timer(tp, t, timer);
++	struct net_device *dev = (struct net_device*)data1;
++	unsigned char 		tmp_cr12;
++	unsigned long 		flags;
++	int			link_status;
++        u32            csr0_val,csr8_val,csr7_val,csr5_val;
++        u32            csr6_val,csr3_val,csr4_val;
++        u32            csr9_val,csr10_val,csr11_val;
++
++        csr0_val = dr32(CSR0);
++        csr3_val = dr32(CSR3);
++        csr4_val = dr32(CSR4);
++	spin_lock_irqsave(&tp->lock, flags);
++        phy_read(tp->ioaddr, tp->phy_addr, 0x01, tp->chip_id);
++	link_status = phy_read(tp->ioaddr, tp->phy_addr, 0x01, tp->chip_id) & 0x4;
++	tmp_cr12 = link_status ? 0x3 : 0;
++        csr5_val = dr32(CSR5);
++        csr6_val = dr32(CSR6);
++        csr7_val = dr32(CSR7);
++        csr8_val = dr32(CSR8);
++#ifdef DBG_FLAG
++    printk("dmfe_timer===>start,CRS5:%x,CRS6:%x,CRS7:%x,CRS8:%x,tp->rx_avail_cnt:%d\n",csr5_val,csr6_val,csr7_val,csr8_val,tp->rx_avail_cnt);
++    printk("dmfe_timer===>start,link_status:%x,tmp_cr12:%x,tp->phy_addr:%x,tp->link_failed:%d\n",link_status,tmp_cr12,tp->phy_addr,tp->link_failed);
++#endif
++
++        /* Operating Mode Check */
++	if ( (tp->dm910x_chk_mode & 0x1) && (dev->stats.rx_packets > MAX_CHECK_PACKET) )
++		tp->dm910x_chk_mode = 0x4;
++
++        if ( (!(tmp_cr12 & 0x3)) && (!tp->link_failed) ) {
++                /* Link Failed */
++                printk("dev %x:Link Failed %x\n", tp->phy_addr, link_status);
++                tp->link_failed = 1;
++
++                /* For Force 10/100M Half/Full mode: Enable Auto-Nego mode */
++                /* AUTO or force 1M Homerun/Longrun don't need */
++                if ( !(tp->media_mode & 0x38) )
++                        phy_write(tp->ioaddr, tp->phy_addr, 0, 0x1000, tp->chip_id);
++
++                /* AUTO mode */
++                if (tp->media_mode & DMFE_AUTO) {
++                        /* 10/100M link failed */
++                        tp->cr6_data&=~0x00000200;      /* bit9=0, HD mode */
++                        update_csr6(tp->cr6_data, tp->ioaddr);
++                }
++        } else if ((tmp_cr12 & 0x3) && tp->link_failed) {
++                printk("dev %x:Link OK %x", tp->phy_addr,link_status);
++                tp->link_failed = 0;
++
++                /* Auto Sense Speed */
++                if ((tp->media_mode & DMFE_AUTO) && dmfe_sense_speed(dev) )
++                        tp->link_failed = 1;
++                dmfe_process_mode(dev);
++                SHOW_MEDIA_TYPE(tp->op_mode);
++        }
++
++	spin_unlock_irqrestore(&tp->lock, flags);
++	tp->timer.expires = DMFE_TIMER_WUT + HZ * 2; //jiffies + TIMEOUT;
++	add_timer(&tp->timer);
++
++#ifdef DBG_FLAG
++    printk("dmfe_timer===================================>end\n");
++#endif
++}
++
++/*
++ * update CSR6, firstly stop it then write new value and start.
++ */
++static void update_csr6(u32 val, void *ioaddr)
++{
++	writel((val & (~0x2002)), ioaddr);
++	udelay(5);
++	writel((val | 0x2002), ioaddr);
++	udelay(5);
++}
++
++static u8 dmfe_sense_speed(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++        u8 ErrFlag = 0;
++        u16 phy_mode0,phy_mode1,phy_mode25;
++
++    phy_mode0 = phy_read(tp->ioaddr, tp->phy_addr, 0, tp->chip_id);
++    phy_mode1 = phy_read(tp->ioaddr, tp->phy_addr, 1, tp->chip_id);
++    phy_mode25 = phy_read(tp->ioaddr, tp->phy_addr, 25, tp->chip_id);
++
++
++        if ( (phy_mode0 & 0x1000)&& (phy_mode1&0x0020)) {
++                switch ((phy_mode25&3)|(phy_mode0&0x100)) {
++                case 0x002: tp->op_mode = DMFE_10MHF; break;
++                case 0x102: tp->op_mode = DMFE_10MFD; break;
++                case 0x001: tp->op_mode = DMFE_100MHF; break;
++                case 0x101: tp->op_mode = DMFE_100MFD; break;
++                default: tp->op_mode = DMFE_100MHF;
++                        ErrFlag = 1;
++                        break;
++                }
++        } else {
++                tp->op_mode = DMFE_100MHF;
++                ErrFlag = 1;
++        }
++        return ErrFlag;
++}
++/*
++ *  Set 10/100 phyxcer capability
++ *  AUTO mode : phyxcer register4 is NIC capability
++ *  Force mode: phyxcer register4 is the force media
++ **/
++static void dmfe_set_phyxcer(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++	u16 	phy_reg;
++	int 	i = 0;
++
++	/* restart auto negotion */
++	phy_reg = phy_read(tp->ioaddr, tp->phy_addr, 0, tp->chip_id);
++	phy_write(tp->ioaddr, tp->phy_addr, 0, 0x200|phy_reg, tp->chip_id);
++
++	/* Phyxcer capability setting */
++	do {
++		i++;
++		phy_reg = phy_read(tp->ioaddr, tp->phy_addr, 1, tp->chip_id);
++	} while (((phy_reg & 0x20) == 0) && (i < 10000));
++
++	phy_reg = phy_read(tp->ioaddr, tp->phy_addr, 4, tp->chip_id);
++	phy_reg = phy_read(tp->ioaddr, tp->phy_addr, 4, tp->chip_id) & ~0x01e0;
++
++	if (tp->media_mode & DMFE_AUTO) {
++		/* AUTO Mode */
++		phy_reg |= tp->PHY_reg4;
++	} else {
++		/* Force Mode */
++		switch(tp->media_mode) {
++		case DMFE_10MHF:
++			phy_reg |= 0x20;
++			break;
++		case DMFE_10MFD:
++			phy_reg |= 0x40;
++			break;
++		case DMFE_100MHF:
++			phy_reg |= 0x80;
++			break;
++		case DMFE_100MFD:
++			phy_reg |= 0x100;
++			break;
++		}
++	}
++
++	/* Write new capability to Phyxcer Reg4 */
++	if ( !(phy_reg & 0x01e0)) {
++		phy_reg|=tp->PHY_reg4;
++		tp->media_mode|=DMFE_AUTO;
++	}
++	phy_write(tp->ioaddr, tp->phy_addr, 4, phy_reg, tp->chip_id);
++
++	/* Restart Auto-Negotiation */
++	phy_write(tp->ioaddr, tp->phy_addr, 0, 0x1200, tp->chip_id);
++
++}
++
++/*
++ *	Process op-mode
++ *	AUTO mode : PHY controller in Auto-negotiation Mode
++ *	Force mode: PHY controller in force mode with HUB
++ *			N-way force capability with SWITCH
++ */
++
++static void dmfe_process_mode(struct net_device *dev)
++{
++	struct dmfe_private 	*tp = netdev_priv(dev);
++
++	/* Full Duplex Mode Check */
++	if (tp->op_mode & 0x4)
++		tp->cr6_data |= CR6_FDM;	/* Set Full Duplex Bit */
++	else
++		tp->cr6_data &= ~CR6_FDM;	/* Clear Full Duplex Bit */
++
++	update_csr6(tp->cr6_data, tp->ioaddr+CSR6);
++}
++
++
++/*
++ *	Write a word to Phy register
++ */
++
++static void phy_write(void *iobase, u8 phy_addr, u8 offset, u16 phy_data, u32 chip_id)
++{
++	u16 i;
++	void *ioaddr;
++
++	if (chip_id == PCI_DM9132_ID) {
++		ioaddr = iobase + 0x80 + offset * 4;
++		writew(phy_data, ioaddr);
++	} else {
++		/* DM9102/DM9102A Chip */
++		ioaddr = iobase + CSR9;
++
++		/* Send 33 synchronization clock to Phy controller */
++		for (i = 0; i < 35; i++)
++			phy_write_1bit(ioaddr, PHY_DATA_1);
++
++		/* Send start command(01) to Phy */
++		phy_write_1bit(ioaddr, PHY_DATA_0);
++		phy_write_1bit(ioaddr, PHY_DATA_1);
++
++		/* Send write command(01) to Phy */
++		phy_write_1bit(ioaddr, PHY_DATA_0);
++		phy_write_1bit(ioaddr, PHY_DATA_1);
++
++		/* Send Phy addres */
++		for (i = 0x10; i > 0; i = i >> 1)
++			phy_write_1bit(ioaddr, phy_addr & i ? PHY_DATA_1 : PHY_DATA_0);
++
++		/* Send register addres */
++		for (i = 0x10; i > 0; i = i >> 1)
++			phy_write_1bit(ioaddr, offset & i ? PHY_DATA_1 : PHY_DATA_0);
++
++		/* written trasnition */
++		phy_write_1bit(ioaddr, PHY_DATA_1);
++		phy_write_1bit(ioaddr, PHY_DATA_0);
++
++		/* Write a word data to PHY controller */
++		for ( i = 0x8000; i > 0; i >>= 1)
++			phy_write_1bit(ioaddr, phy_data & i ? PHY_DATA_1 : PHY_DATA_0);
++	}
++}
++
++
++/*
++ *	Read a word data from phy register
++ */
++
++static u16 phy_read(void *iobase, u8 phy_addr, u8 offset, u32 chip_id)
++{
++	int i;
++	u16 phy_data;
++	void *ioaddr;
++
++	if (chip_id == PCI_DM9132_ID) {
++		/* DM9132 Chip */
++		ioaddr = iobase + 0x80 + offset * 4;
++		phy_data = readw(ioaddr);
++	} else {
++		/* DM9102/DM9102A Chip */
++		ioaddr = iobase + CSR9;
++
++		/* Send 33 synchronization clock to Phy controller */
++		for (i = 0; i < 35; i++)
++			phy_write_1bit(ioaddr, PHY_DATA_1);
++
++		/* Send start command(01) to Phy */
++		phy_write_1bit(ioaddr, PHY_DATA_0);
++		phy_write_1bit(ioaddr, PHY_DATA_1);
++
++		/* Send read command(10) to Phy */
++		phy_write_1bit(ioaddr, PHY_DATA_1);
++		phy_write_1bit(ioaddr, PHY_DATA_0);
++
++		/* Send Phy addres */
++		for (i = 0x10; i > 0; i = i >> 1)
++			phy_write_1bit(ioaddr, phy_addr & i ? PHY_DATA_1 : PHY_DATA_0);
++
++		/* Send register addres */
++		for (i = 0x10; i > 0; i = i >> 1)
++			phy_write_1bit(ioaddr, offset & i ? PHY_DATA_1 : PHY_DATA_0);
++
++		/* Skip transition state */
++		phy_read_1bit(ioaddr);
++
++		/* read 16bit data */
++		for (phy_data = 0, i = 0; i < 16; i++) {
++			phy_data <<= 1;
++			phy_data |= phy_read_1bit(ioaddr);
++		}
++	}
++
++	return phy_data;
++}
++
++static void phy_write_1bit(void *ioaddr, u32 phy_data)
++{
++	phy_data |=1<<18;
++	writel(phy_data, ioaddr);			/* MII Clock Low */
++	readl(ioaddr);
++	udelay(1);
++	writel(phy_data | MDCLKH, ioaddr);	/* MII Clock High */
++	readl(ioaddr);
++	udelay(1);
++	writel(phy_data, ioaddr);			/* MII Clock Low */
++	readl(ioaddr);
++	udelay(1);
++}
++
++
++/*
++ *	Read one bit phy data from PHY controller
++ */
++
++static u16 phy_read_1bit(void *ioaddr)
++{
++	u16 phy_data;
++
++	writel(0x10000, ioaddr);
++	readl(ioaddr);
++	udelay(1);
++	phy_data = ( readl(ioaddr) >> 19 ) & 0x1;
++	writel(0x00000, ioaddr);
++	readl(ioaddr);
++	udelay(1);
++
++	return phy_data;
++}
++
++static void dmfe_remove_one(struct net_device 	*dev)
++{
++
++	unregister_netdev(dev);
++	free_netdev(dev);
++}
++
++static int dmfe_pltfr_probe(struct platform_device *pdev)
++{
++	int ret = 0;
++	struct resource *res;
++	void __iomem *addr = NULL;
++	int irq;
++	struct net_device *ndev;
++
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (!res)
++		return -ENODEV;
++
++	if (!request_mem_region(res->start, resource_size(res), pdev->name)) {
++		pr_err("%s: ERROR: memory allocation failed"
++		       "cannot get the I/O addr 0x%x\n",
++		       __func__, (unsigned int)res->start);
++		return -EBUSY;
++	}
++
++	addr = ioremap(res->start, resource_size(res));
++	if (!addr) {
++		pr_err("%s: ERROR: memory mapping failed", __func__);
++		ret = -ENOMEM;
++		goto out_release_region;
++	}
++    irq = platform_get_irq(pdev, 0);
++
++	ret = -ENOMEM;
++	ndev = dmfe_init_one(&(pdev->dev), addr, irq);
++	if(!ndev) goto out_release_region;
++
++	platform_set_drvdata(pdev, ndev);
++	return 0;
++
++
++
++out_release_region:
++	release_mem_region(res->start, resource_size(res));
++
++	return ret;
++}
++
++static int dmfe_pltfr_remove(struct platform_device *pdev)
++{
++	struct resource *res;
++	struct net_device *ndev = platform_get_drvdata(pdev);
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	release_region(res->start, DMFE_IO_SIZE);
++	dmfe_remove_one(ndev);
++	return 0;
++}
++
++    #ifdef CONFIG_OF
++   static const struct of_device_id ls_dmfe_dt_match[] = {
++            { .compatible = "dmfe",  },
++                 {},
++
++   };
++    MODULE_DEVICE_TABLE(of, ls_dmfe_dt_match);
++   #endif
++
++static struct platform_driver dmfe_driver = {
++	.probe = dmfe_pltfr_probe,
++	.remove = dmfe_pltfr_remove,
++	.driver = {
++		   .name = "dmfe",
++		   .owner = THIS_MODULE,
++#ifdef CONFIG_OF
++    .of_match_table = of_match_ptr(ls_dmfe_dt_match),
++#endif
++    },
++
++};
++
++static int __init dmfe_init_module(void)
++{
++	printk("ITC MAC 10/100M Fast Ethernet Adapter driver 1.0 init\n");
++
++	return platform_driver_register(&dmfe_driver);
++}
++
++static void __exit dmfe_cleanup_module(void)
++{
++	printk("ITC MAC 10/100M Fast Ethernet Adapter driver 1.0 init cleanup\n");
++}
++
++module_init(dmfe_init_module);
++module_exit(dmfe_cleanup_module);
+-- 
+2.37.2
+

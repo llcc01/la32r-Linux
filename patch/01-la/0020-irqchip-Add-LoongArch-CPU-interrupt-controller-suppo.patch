@@ -1,0 +1,136 @@
+From 804b4113c6d7dfebe561dc24f02f7ed10ba99573 Mon Sep 17 00:00:00 2001
+From: Huacai Chen <chenhuacai@loongson.cn>
+Date: Thu, 31 Dec 2020 15:13:33 +0800
+Subject: [PATCH 20/48] irqchip: Add LoongArch CPU interrupt controller support
+
+We are preparing to add new Loongson (based on LoongArch, not MIPS)
+support. This patch add LoongArch CPU interrupt controller support.
+
+Signed-off-by: Huacai Chen <chenhuacai@loongson.cn>
+---
+ drivers/irqchip/Kconfig             | 10 ++++
+ drivers/irqchip/Makefile            |  1 +
+ drivers/irqchip/irq-loongarch-cpu.c | 78 +++++++++++++++++++++++++++++
+ 3 files changed, 89 insertions(+)
+ create mode 100644 drivers/irqchip/irq-loongarch-cpu.c
+
+diff --git a/drivers/irqchip/Kconfig b/drivers/irqchip/Kconfig
+index 084bc4c2eebd..443c3a7a0cc1 100644
+--- a/drivers/irqchip/Kconfig
++++ b/drivers/irqchip/Kconfig
+@@ -528,6 +528,16 @@ config EXYNOS_IRQ_COMBINER
+ 	  Say yes here to add support for the IRQ combiner devices embedded
+ 	  in Samsung Exynos chips.
+ 
++config IRQ_LOONGARCH_CPU
++	bool
++	select GENERIC_IRQ_CHIP
++	select IRQ_DOMAIN
++	select GENERIC_IRQ_EFFECTIVE_AFF_MASK
++	help
++	  Support for the LoongArch CPU Interrupt Controller. For details of
++	  irq chip hierarchy on LoongArch platforms please read the document
++	  Documentation/loongarch/irq-chip-model.rst.
++
+ config LOONGSON_LIOINTC
+ 	bool "Loongson Local I/O Interrupt Controller"
+ 	depends on MACH_LOONGSON64
+diff --git a/drivers/irqchip/Makefile b/drivers/irqchip/Makefile
+index f88cbf36a9d2..4e34eebe180b 100644
+--- a/drivers/irqchip/Makefile
++++ b/drivers/irqchip/Makefile
+@@ -105,6 +105,7 @@ obj-$(CONFIG_LS1X_IRQ)			+= irq-ls1x.o
+ obj-$(CONFIG_TI_SCI_INTR_IRQCHIP)	+= irq-ti-sci-intr.o
+ obj-$(CONFIG_TI_SCI_INTA_IRQCHIP)	+= irq-ti-sci-inta.o
+ obj-$(CONFIG_TI_PRUSS_INTC)		+= irq-pruss-intc.o
++obj-$(CONFIG_IRQ_LOONGARCH_CPU)		+= irq-loongarch-cpu.o
+ obj-$(CONFIG_LOONGSON_LIOINTC)		+= irq-loongson-liointc.o
+ obj-$(CONFIG_LOONGSON_HTPIC)		+= irq-loongson-htpic.o
+ obj-$(CONFIG_LOONGSON_HTVEC)		+= irq-loongson-htvec.o
+diff --git a/drivers/irqchip/irq-loongarch-cpu.c b/drivers/irqchip/irq-loongarch-cpu.c
+new file mode 100644
+index 000000000000..7d2aa281b28b
+--- /dev/null
++++ b/drivers/irqchip/irq-loongarch-cpu.c
+@@ -0,0 +1,78 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2020-2021 Loongson Technology Corporation Limited
++ */
++
++#include <linux/init.h>
++#include <linux/interrupt.h>
++#include <linux/kernel.h>
++#include <linux/irq.h>
++#include <linux/irqchip.h>
++#include <linux/irqdomain.h>
++
++#include <asm/setup.h>
++#include <asm/loongarchregs.h>
++
++static struct irq_domain *irq_domain;
++
++static inline void enable_loongarch_irq(struct irq_data *d)
++{
++	set_csr_ecfg(ECFGF(d->hwirq));
++}
++
++#define eoi_loongarch_irq enable_loongarch_irq
++
++static inline void disable_loongarch_irq(struct irq_data *d)
++{
++	clear_csr_ecfg(ECFGF(d->hwirq));
++}
++
++#define ack_loongarch_irq disable_loongarch_irq
++
++static struct irq_chip loongarch_cpu_irq_controller = {
++	.name		= "LoongArch",
++	.irq_ack	= ack_loongarch_irq,
++	.irq_eoi	= eoi_loongarch_irq,
++	.irq_enable	= enable_loongarch_irq,
++	.irq_disable	= disable_loongarch_irq,
++};
++
++asmlinkage void default_handle_irq(int irq)
++{
++	do_IRQ(irq_linear_revmap(irq_domain, irq));
++}
++
++static int loongarch_cpu_intc_map(struct irq_domain *d, unsigned int irq,
++			     irq_hw_number_t hwirq)
++{
++	struct irq_chip *chip;
++
++	irq_set_noprobe(irq);
++	chip = &loongarch_cpu_irq_controller;
++	set_vi_handler(EXCCODE_INT_START + hwirq, default_handle_irq);
++	irq_set_chip_and_handler(irq, chip, handle_percpu_irq);
++
++	return 0;
++}
++
++static const struct irq_domain_ops loongarch_cpu_intc_irq_domain_ops = {
++	.map = loongarch_cpu_intc_map,
++	.xlate = irq_domain_xlate_onecell,
++};
++
++int __init loongarch_cpu_irq_init(struct device_node *of_node, struct device_node *parent)
++{
++	/* Mask interrupts. */
++	clear_csr_ecfg(ECFG0_IM);
++	clear_csr_estat(ESTATF_IP);
++
++	irq_domain = irq_domain_add_simple(of_node, EXCCODE_INT_NUM,
++		     LOONGSON_CPU_IRQ_BASE, &loongarch_cpu_intc_irq_domain_ops, NULL);
++
++	if (!irq_domain)
++		panic("Failed to add irqdomain for LoongArch CPU");
++
++	return 0;
++}
++
++IRQCHIP_DECLARE(cpu_intc, "loongson,cpu-interrupt-controller", loongarch_cpu_irq_init);
+-- 
+2.37.2
+

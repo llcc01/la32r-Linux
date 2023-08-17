@@ -1,0 +1,37 @@
+From c8d7cd1ab07cab6157ade465cdde66a183346c67 Mon Sep 17 00:00:00 2001
+From: Jianmin Lv <lvjianmin@loongson.cn>
+Date: Thu, 29 Oct 2020 16:29:11 +0800
+Subject: [PATCH 11/48] serial: 8250_pnp: Support configurable clock frequency
+
+ACPI-based Loongson boards need configurable rather than fixed clock
+frequency for serial ports.
+
+Signed-off-by: Jianmin Lv <lvjianmin@loongson.cn>
+Signed-off-by: Huacai Chen <chenhuacai@loongson.cn>
+---
+ drivers/tty/serial/8250/8250_pnp.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/tty/serial/8250/8250_pnp.c b/drivers/tty/serial/8250/8250_pnp.c
+index de90d681b64c..98e5ee4d0d08 100644
+--- a/drivers/tty/serial/8250/8250_pnp.c
++++ b/drivers/tty/serial/8250/8250_pnp.c
+@@ -13,6 +13,7 @@
+ #include <linux/pnp.h>
+ #include <linux/string.h>
+ #include <linux/kernel.h>
++#include <linux/property.h>
+ #include <linux/serial_core.h>
+ #include <linux/bitops.h>
+ 
+@@ -475,6 +476,7 @@ serial_pnp_probe(struct pnp_dev *dev, const struct pnp_device_id *dev_id)
+ 	if (pnp_irq_flags(dev, 0) & IORESOURCE_IRQ_SHAREABLE)
+ 		uart.port.flags |= UPF_SHARE_IRQ;
+ 	uart.port.uartclk = 1843200;
++	device_property_read_u32(&dev->dev, "clock-frequency", &uart.port.uartclk);
+ 	uart.port.dev = &dev->dev;
+ 
+ 	line = serial8250_register_8250_port(&uart);
+-- 
+2.37.2
+

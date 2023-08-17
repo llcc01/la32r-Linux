@@ -1,0 +1,32 @@
+From bb6b2ca56ade552181363f5b8be3c42397a223c0 Mon Sep 17 00:00:00 2001
+From: Fanrui Meng <mengfanrui@loongson.cn>
+Date: Mon, 30 May 2022 17:24:17 +0800
+Subject: [PATCH 48/48] LoongArch32r : set cpu_clock_freq reliable .
+
+	temp reading 'cpu_clock_freq' from a fix reg.
+
+Signed-off-by: Fanrui Meng <mengfanrui@loongson.cn>
+---
+ arch/loongarch/include/asm/time.h | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/arch/loongarch/include/asm/time.h b/arch/loongarch/include/asm/time.h
+index d455998b3855..d4cc3876d228 100644
+--- a/arch/loongarch/include/asm/time.h
++++ b/arch/loongarch/include/asm/time.h
+@@ -38,9 +38,11 @@ static inline unsigned int calc_const_freq(void)
+ #endif
+ 
+ #ifdef CONFIG_32BIT
++#define LOONGARCH32_FREQ_REG 0x9fd0f030
+ static inline unsigned int calc_const_freq(void)
+ {
+-	return 200000000;
++    unsigned int freq = *(int *)LOONGARCH32_FREQ_REG;
++	return freq;
+ }
+ #endif
+ 
+-- 
+2.37.2
+
