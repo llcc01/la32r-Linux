@@ -60,7 +60,7 @@
                         compatible = "dmfe";
                         reg = <0x1ff00000 0x10000>;
                         interrupt-parent = <&cpuic>;
-                        interrupts = <3>;
+                        interrupts = <1>;
                         interrupt-names = "macirq";
                         mac-address = [ 64 48 48 48 48 60 ];/* [>mac 64:48:48:48:48:60 <]*/
                         phy-mode = "rgmii";
@@ -79,26 +79,45 @@
 #endif
 
         nand@0x1fe78000{
-             #address-cells = <1>;
-             #size-cells = <1>;
-             compatible = "ls1a-nand";
-             reg = <0x1fe78000 0x4000
-                 0x1fd01160 0x0>;
-             interrupt-parent = <&cpuic>;
-             interrupts = <4>;
-             interrupt-names = "nand_irq";
+            #address-cells = <1>;
+            #size-cells = <1>;
+            compatible = "ls1a-nand";
+            reg = <0x1fe78000 0x4000
+                0x1fd01160 0x0>;
+            interrupt-parent = <&cpuic>;
+            interrupts = <4>;
+            interrupt-names = "nand_irq";
 
-             number-of-parts = <0x2>;
-             partition@0 {
-                 label = "kernel_partition";
-                 reg = <0x0000000 0x01400000>;
-             };
+            number-of-parts = <0x2>;
+            partition@0 {
+                label = "kernel_partition";
+                reg = <0x0000000 0x01400000>;
+            };
 
-             partition@0x01400000 {
-                 label = "os_partition";
-                 reg = <0x01400000 0x0>;
-             };
-         };
+            partition@0x01400000 {
+                label = "os_partition";
+                reg = <0x01400000 0x0>;
+            };
+        };
+
+        ps2: ps2@1c020000 {
+			compatible = "altr,ps2-1.0";
+			reg = <0x1c020000 0x1000>;
+			interrupt-parent = <&cpuintc>;
+			interrupts = <3>;
+		};
+
+        axi_tft_0: axi_tft@1c010000 {
+			compatible = "xlnx,xps-tft-1.00.accl";
+			reg = <0x1c010000 0x1000>, // TFT controller
+				<0x1c050000 0x1000>, // framebuffer read
+				<0x1c060000 0x1000>, // framebuffer write
+				<0x1ff08000 0x4>; // video stream modifier control
+			xlnx,dcr-splb-slave-if = <0x1>;
+			resolution = <640 480>; // actual video size
+			virtual-resolution = <1024 480>; // framebuffersize
+			phys-size = <640 480>; // don't care (physical size of screen)
+		};
 
     };
 };
