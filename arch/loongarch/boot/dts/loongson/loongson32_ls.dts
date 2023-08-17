@@ -103,7 +103,7 @@
         ps2: ps2@1c020000 {
 			compatible = "altr,ps2-1.0";
 			reg = <0x1c020000 0x1000>;
-			interrupt-parent = <&cpuintc>;
+			interrupt-parent = <&cpuic>;
 			interrupts = <3>;
 		};
 
