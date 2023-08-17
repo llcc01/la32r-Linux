@@ -16,16 +16,16 @@
 
 
 	extioiic: interrupt-controller@0x1fe11600 {
-                compatible = "loongson,extioi-interrupt-controller";
-                interrupt-controller;
-                #interrupt-cells = <1>;
-                interrupt-parent = <&cpuic>;
-                interrupts = <3>;
-                interrupt-names = "cascade";
-                vec_count=<128>;
-                misc_func=<0x100>;
-                eio_en_off=<27>;
-        };
+        compatible = "loongson,extioi-interrupt-controller";
+        interrupt-controller;
+        #interrupt-cells = <1>;
+        interrupt-parent = <&cpuic>;
+        interrupts = <3>;
+        interrupt-names = "cascade";
+        vec_count=<128>;
+        misc_func=<0x100>;
+        eio_en_off=<27>;
+    };
 
 
 
@@ -36,7 +36,7 @@
         };
 
 	cpuic: interrupt-controller {
-	compatible = "loongson,cpu-interrupt-controller";
+	    compatible = "loongson,cpu-interrupt-controller";
         interrupt-controller;
 		#interrupt-cells = <1>;
 	};
@@ -48,26 +48,26 @@
 		ranges = <0x10000000 0x10000000 0x10000000 >;
 
         cpu_uart0: serial@0x1fe001e0 {
-                        compatible = "ns16550a";
-                        reg = < 0x1fe001e0  0x10>;
-                        clock-frequency = <33000000>;
-                        interrupt-parent = <&cpuic>;
-                        interrupts = <2>;
-                        no-loopback-test;
-                };
+            compatible = "ns16550a";
+            reg = < 0x1fe001e0  0x10>;
+            clock-frequency = <33000000>;
+            interrupt-parent = <&cpuic>;
+            interrupts = <2>;
+            no-loopback-test;
+        };
 
         gmac0: dmfe@0x1ff00000{
-                        compatible = "dmfe";
-                        reg = <0x1ff00000 0x10000>;
-                        interrupt-parent = <&cpuic>;
-                        interrupts = <1>;
-                        interrupt-names = "macirq";
-                        mac-address = [ 64 48 48 48 48 60 ];/* [>mac 64:48:48:48:48:60 <]*/
-                        phy-mode = "rgmii";
-                        bus_id = <0x0>;
-                        phy_addr = <0xffffffff>;
-                        dma-mask = <0xffffffff 0xffffffff>;
-                };
+            compatible = "dmfe";
+            reg = <0x1ff00000 0x10000>;
+            interrupt-parent = <&cpuic>;
+            interrupts = <1>;
+            interrupt-names = "macirq";
+            mac-address = [ 64 48 48 48 48 60 ];/* [>mac 64:48:48:48:48:60 <]*/
+            phy-mode = "rgmii";
+            bus_id = <0x0>;
+            phy_addr = <0xffffffff>;
+            dma-mask = <0xffffffff 0xffffffff>;
+        };
 #if 0
             ahci@0x1fe30000{
                 compatible = "snps,spear-ahci";
@@ -117,6 +117,11 @@
 			resolution = <640 480>; // actual video size
 			virtual-resolution = <1024 480>; // framebuffersize
 			phys-size = <640 480>; // don't care (physical size of screen)
+		};
+
+        lcd0: lcd@1c030000 {
+			compatible = "lcd,nt35510";
+			reg = <0x1c030000 0x1000>;
 		};
 
     };
