@@ -60,7 +60,7 @@
             compatible = "dmfe";
             reg = <0x1ff00000 0x10000>;
             interrupt-parent = <&cpuic>;
-            interrupts = <1>;
+            interrupts = <3>;
             interrupt-names = "macirq";
             mac-address = [ 64 48 48 48 48 60 ];/* [>mac 64:48:48:48:48:60 <]*/
             phy-mode = "rgmii";
