@@ -104,7 +104,7 @@
 			compatible = "altr,ps2-1.0";
 			reg = <0x1c020000 0x1000>;
 			interrupt-parent = <&cpuic>;
-			interrupts = <3>;
+			interrupts = <5>;
 		};
 
         axi_tft_0: axi_tft@1c010000 {
