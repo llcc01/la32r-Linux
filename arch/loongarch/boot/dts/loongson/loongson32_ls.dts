@@ -15,17 +15,17 @@
         };
 
 
-	extioiic: interrupt-controller@0x1fe11600 {
-        compatible = "loongson,extioi-interrupt-controller";
-        interrupt-controller;
-        #interrupt-cells = <1>;
-        interrupt-parent = <&cpuic>;
-        interrupts = <3>;
-        interrupt-names = "cascade";
-        vec_count=<128>;
-        misc_func=<0x100>;
-        eio_en_off=<27>;
-    };
+	// extioiic: interrupt-controller@0x1fe11600 {
+    //     compatible = "loongson,extioi-interrupt-controller";
+    //     interrupt-controller;
+    //     #interrupt-cells = <1>;
+    //     interrupt-parent = <&cpuic>;
+    //     interrupts = <3>;
+    //     interrupt-names = "cascade";
+    //     vec_count=<128>;
+    //     misc_func=<0x100>;
+    //     eio_en_off=<27>;
+    // };
 
 
 
